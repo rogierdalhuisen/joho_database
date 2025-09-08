@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+
+# Django
+*.log
+db.sqlite3
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Secrets
+.env
+local_settings.py
+*.local.json
+
+# Other tools
+.claude/
