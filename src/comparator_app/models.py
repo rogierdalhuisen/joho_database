@@ -37,6 +37,7 @@ class TargetAudiences(models.Model):
 
 class Products(models.Model):
     POLICY_TYPE_CHOICES = [
+        ('flexible', 'Flexible'),
         ('individual', 'Individual'),
         ('family', 'Family'),
         ('group', 'Group'),
