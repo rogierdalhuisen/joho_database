@@ -206,12 +206,15 @@ class ParameterOptions(models.Model):
 
 
 class PremiumRates(models.Model):
+    BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
+
+
     rate_id = models.AutoField(primary_key=True)
     product_module = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premium_rates')
     level = models.ForeignKey(CoverageLevels, on_delete=models.CASCADE, related_name='premium_rates')
     premium_amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default='EUR')
-    billing_cycle = models.CharField(max_length=20, default='monthly')
+    billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
     parameter_options = models.ManyToManyField(
         ParameterOptions,
         through='RateParameterMapping',
@@ -234,6 +237,9 @@ class RateParameterMapping(models.Model):
         db_table = 'rate_parameter_mapping'
         unique_together = ('rate', 'option')
         verbose_name_plural = 'Rate Parameter Mappings'
+
+    def __str__(self):
+        return f"{self.rate}"
 
 
 class BusinessRules(models.Model):
