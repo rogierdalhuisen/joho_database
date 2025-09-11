@@ -17,7 +17,13 @@ from .models import (
     BusinessRules
 )
 
-# Simple registration for most models
+@admin.register(PremiumRates)
+class PremiumRatesAdmin(admin.ModelAdmin):
+    list_display = ('product_module', 'level', 'premium_amount', 'currency', 'billing_cycle')
+    list_filter = ('product_module__product__provider', 'product_module__product')
+    #search_fields = ('product_module__product__name', 'product_module__module__standard_name', 'level__level_name')
+
+# Simple registration for other models
 admin.site.register(Providers)
 admin.site.register(TargetAudiences)
 admin.site.register(Products)
@@ -30,6 +36,6 @@ admin.site.register(CoverageItems)
 admin.site.register(CoverageItemDetails)
 admin.site.register(PremiumParameters)
 admin.site.register(ParameterOptions)
-admin.site.register(PremiumRates)
+# PremiumRates is now registered with the custom class above
 admin.site.register(RateParameterMapping)
 admin.site.register(BusinessRules)
