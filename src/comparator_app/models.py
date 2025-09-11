@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from smart_selects.db_fields import ChainedForeignKey
 
 
 class Providers(models.Model):
@@ -202,7 +203,7 @@ class ParameterOptions(models.Model):
         verbose_name_plural = 'Parameter Options'
     
     def __str__(self):
-        return f"{self.parameter.parameter_name} - {self.option_value_text}"
+        return f"{self.parameter} - {self.option_value_text}"
 
 
 class PremiumRates(models.Model):
@@ -211,7 +212,16 @@ class PremiumRates(models.Model):
 
     rate_id = models.AutoField(primary_key=True)
     product_module = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premium_rates')
-    level = models.ForeignKey(CoverageLevels, on_delete=models.CASCADE, related_name='premium_rates')
+    level = ChainedForeignKey(
+        CoverageLevels,
+        chained_field="product_module",
+        chained_model_field="product_module",
+        show_all=False,
+        auto_choose=True,
+        sort=True,
+        on_delete=models.CASCADE,
+        related_name='+'  # Disabled reverse relation to avoid name clash
+    )
     premium_amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default='EUR')
     billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)

@@ -38,6 +38,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Third-party apps
+    'smart_selects',
+    'django_extensions',
     # Our apps
     'comparator_app',
 ]
