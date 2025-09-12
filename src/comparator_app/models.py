@@ -88,7 +88,7 @@ class ProductModules(models.Model):
         verbose_name_plural = 'Product Modules'
     
     def __str__(self):
-        return f"{self.product.name} - {self.provider_specific_name}"
+        return self.provider_specific_name or f"Module ID: {self.product_module_id}"
 
 
 class CoverageLevels(models.Model):
@@ -238,7 +238,7 @@ class PremiumRates(models.Model):
         verbose_name_plural = 'Premium Rates'
     
     def __str__(self):
-        return f"{self.product_module} - {self.level} - €{self.premium_amount}/{self.billing_cycle}"
+        return f"{self.level} - €{self.premium_amount}/{self.billing_cycle}"
 
 
 class RateParameterMapping(models.Model):
