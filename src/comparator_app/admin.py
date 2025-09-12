@@ -18,7 +18,7 @@ from .models import (
 )
 @admin.register(PremiumRates)
 class PremiumRatesAdmin(admin.ModelAdmin):
-    list_display = ('product_module', 'level', 'premium_amount')
+    list_display = ('product_module', 'combination', 'premium_amount')
     list_filter = ('product_module__product',)
 
 @admin.register(CoverageLevels)

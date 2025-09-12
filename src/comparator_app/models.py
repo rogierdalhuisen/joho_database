@@ -224,6 +224,7 @@ class PremiumRates(models.Model):
         on_delete=models.CASCADE,
         related_name='premium_rates'
     )
+    combination = models.CharField(max_length=255, default='default', help_text="Description of parameter combination")
     premium_amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default='EUR')
     billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
