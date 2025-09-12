@@ -76,33 +76,19 @@ class ProductTargetAudiences(models.Model):
         verbose_name_plural = 'Product Target Audiences'
 
 
-class Modules(models.Model):
-    module_id = models.AutoField(primary_key=True)
-    module_code = models.CharField(max_length=50, unique=True)
-    standard_name = models.CharField(max_length=255)
-    
-    class Meta:
-        db_table = 'modules'
-        verbose_name_plural = 'Modules'
-    
-    def __str__(self):
-        return f"{self.module_code} - {self.standard_name}"
-
-
 class ProductModules(models.Model):
     product_module_id = models.AutoField(primary_key=True)
     product = models.ForeignKey(Products, on_delete=models.CASCADE, related_name='product_modules')
-    module = models.ForeignKey(Modules, on_delete=models.CASCADE, related_name='product_modules')
     is_mandatory = models.BooleanField(default=False)
     provider_specific_name = models.CharField(max_length=255, blank=True)
-    
+    premiums_available = models.BooleanField(default=True)
+
     class Meta:
         db_table = 'product_modules'
-        unique_together = ('product', 'module')
         verbose_name_plural = 'Product Modules'
     
     def __str__(self):
-        return f"{self.product.name} - {self.module.standard_name}"
+        return f"{self.product.name} - {self.provider_specific_name}"
 
 
 class CoverageLevels(models.Model):
@@ -138,15 +124,32 @@ class CoverageCategories(models.Model):
 
 class CoverageItems(models.Model):
     item_id = models.AutoField(primary_key=True)
-    category = models.ForeignKey(CoverageCategories, on_delete=models.CASCADE, related_name='coverage_items')
     item_name = models.CharField(max_length=255)
+    categories = models.ManyToManyField(
+        CoverageCategories,
+        through='ItemCategoryMapping',
+        related_name='coverage_items'
+    )
     
     class Meta:
         db_table = 'coverage_items'
         verbose_name_plural = 'Coverage Items'
     
     def __str__(self):
-        return f"{self.category.category_name} - {self.item_name}"
+        return self.item_name
+
+
+class ItemCategoryMapping(models.Model):
+    item = models.ForeignKey(CoverageItems, on_delete=models.CASCADE)
+    category = models.ForeignKey(CoverageCategories, on_delete=models.CASCADE)
+    
+    class Meta:
+        db_table = 'item_category_mapping'
+        unique_together = ('item', 'category')
+        verbose_name_plural = 'Item Category Mappings'
+    
+    def __str__(self):
+        return f"{self.item.item_name} - {self.category.category_name}"
 
 
 class CoverageItemDetails(models.Model):
@@ -209,7 +212,6 @@ class ParameterOptions(models.Model):
 class PremiumRates(models.Model):
     BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
 
-
     rate_id = models.AutoField(primary_key=True)
     product_module = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premium_rates')
     level = ChainedForeignKey(
@@ -220,7 +222,7 @@ class PremiumRates(models.Model):
         auto_choose=True,
         sort=True,
         on_delete=models.CASCADE,
-        related_name='+'  # Disabled reverse relation to avoid name clash
+        related_name='premium_rates'
     )
     premium_amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default='EUR')
