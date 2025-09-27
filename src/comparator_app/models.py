@@ -70,7 +70,7 @@ class Verzekeraars(models.Model):
 
 class VerzekeraarRegio(models.Model):
     verzekeraar_regio_id = models.AutoField(primary_key=True)
-    verzekeraar_id = models.ForeignKey(Verzekeraars, on_delete=models.CASCADE, related_name='regions')
+    verzekeraar_id = models.ForeignKey(Verzekeraars, on_delete=models.CASCADE, related_name='regios')
     regio_naam = models.CharField(max_length=255)
 
     class Meta:
@@ -173,66 +173,66 @@ class DocumentChunk(models.Model):
         return f"Chunk {self.chunk_id} - {self.product_id}"
 
 
-class CoverageLevels(models.Model):
-    level_id = models.AutoField(primary_key=True)
-    level_name = models.CharField(max_length=255)
-    level_rank = models.IntegerField(validators=[MinValueValidator(1)])
+class DekkingsNiveaus(models.Model):
+    niveau_id = models.AutoField(primary_key=True)
+    niveau_name = models.CharField(max_length=255)
+    niveau_rank = models.IntegerField(validators=[MinValueValidator(1)])
 
     class Meta:
-        db_table = 'coverage_levels'
-        ordering = ['level_rank']
-        verbose_name_plural = 'Coverage Levels'
+        db_table = 'dekkings_niveaus'
+        ordering = ['niveau_rank']
+        verbose_name_plural = 'Dekkings Niveaus'
 
     def __str__(self):
-        return f"{self.level_name} (Rank {self.level_rank})"
+        return f"{self.niveau_name} (Rank {self.niveau_rank})"
 
 
-class CoverageCategories(models.Model):
-    category_id = models.AutoField(primary_key=True)
-    parent_category_id = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subcategories')
-    category_name = models.CharField(max_length=255)
+class DekkingsCategorien(models.Model):
+    categorie_id = models.AutoField(primary_key=True)
+    parent_categorie_id = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subcategories')
+    categorie_naam = models.CharField(max_length=255)
 
     class Meta:
-        db_table = 'coverage_categories'
-        verbose_name_plural = 'Coverage Categories'
+        db_table = 'dekkings_categorien'
+        verbose_name_plural = 'Dekkings Categorien'
 
     def __str__(self):
-        if self.parent_category_id:
-            return f"{self.parent_category_id.category_name} > {self.category_name}"
-        return self.category_name
+        if self.parent_categorie_id:
+            return f"{self.parent_categorie_id.categorie_naam} > {self.categorie_naam}"
+        return self.categorie_naam
 
 
-class CoverageItems(models.Model):
+class DekkingsItems(models.Model):
     item_id = models.AutoField(primary_key=True)
-    item_name = models.CharField(max_length=255)
-    categories = models.ManyToManyField(
-        CoverageCategories,
-        through='ItemCategoryMapping',
-        related_name='coverage_items'
+    item_naam = models.CharField(max_length=255)
+    categorien = models.ManyToManyField(
+        DekkingsCategorien,
+        through='ItemCategorieMapping',
+        related_name='dekkings_items'
     )
 
     class Meta:
-        db_table = 'coverage_items'
-        verbose_name_plural = 'Coverage Items'
+        db_table = 'dekkings_items'
+        verbose_name_plural = 'Dekkings Items'
 
     def __str__(self):
-        return self.item_name
+        return self.item_naam
 
 
-class ItemCategoryMapping(models.Model):
-    item_id = models.ForeignKey(CoverageItems, on_delete=models.CASCADE)
-    category_id = models.ForeignKey(CoverageCategories, on_delete=models.CASCADE)
+class ItemCategorieMapping(models.Model):
+    item_id = models.ForeignKey(DekkingsItems, on_delete=models.CASCADE)
+    categorie_id = models.ForeignKey(DekkingsCategorien, on_delete=models.CASCADE)
 
     class Meta:
         db_table = 'item_category_mapping'
-        unique_together = ('item_id', 'category_id')
+        unique_together = ('item_id', 'categorie_id')
         verbose_name_plural = 'Item Category Mappings'
 
     def __str__(self):
-        return f"{self.item_id.item_name} - {self.category_id.category_name}"
+        return f"{self.item_id.item_naam} - {self.categorie_id.categorie_naam}"
 
 
-class CoverageItemDetails(models.Model):
+class DekkingsItemDetails(models.Model):
     COVERAGE_TYPE_CHOICES = [
         ('amount', 'Fixed Amount'),
         ('percentage', 'Percentage'),
@@ -243,87 +243,87 @@ class CoverageItemDetails(models.Model):
     ]
 
     detail_id = models.AutoField(primary_key=True)
-    level_id = models.ForeignKey(CoverageLevels, on_delete=models.CASCADE, related_name='coverage_details')
-    item_id = models.ForeignKey(CoverageItems, on_delete=models.CASCADE, related_name='coverage_details')
-    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='coverage_details')
-    coverage_type = models.CharField(max_length=20, choices=COVERAGE_TYPE_CHOICES)
-    numeric_value = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
-    currency = models.CharField(max_length=3, default='EUR')
-    period = models.CharField(max_length=50, blank=True)
-    conditions_text = models.TextField(blank=True)
+    niveau_id = models.ForeignKey(DekkingsNiveaus, on_delete=models.CASCADE, related_name='dekking_details')
+    item_id = models.ForeignKey(DekkingsItems, on_delete=models.CASCADE, related_name='dekking_details')
+    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='dekking_details')
+    dekkings_type = models.CharField(max_length=20, choices=COVERAGE_TYPE_CHOICES)
+    numerieke_waarde = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    valuta = models.CharField(max_length=3, default='EUR')
+    periode = models.CharField(max_length=50, blank=True)
+    voorwaarden_tekst = models.TextField(blank=True)
 
     class Meta:
-        db_table = 'coverage_item_details'
-        unique_together = ('level_id', 'item_id', 'product_module_id')
-        verbose_name_plural = 'Coverage Item Details'
+        db_table = 'dekkings_item_details'
+        unique_together = ('niveau_id', 'item_id', 'product_module_id')
+        verbose_name_plural = 'Dekkings Item Details'
 
     def __str__(self):
-        return f"{self.level_id} - {self.item_id} ({self.coverage_type})"
+        return f"{self.niveau_id} - {self.item_id} ({self.dekkings_type})"
 
 
-class PremiumParameters(models.Model):
+class PremieParameters(models.Model):
     parameter_id = models.AutoField(primary_key=True)
-    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premium_parameters')
-    parameter_name = models.CharField(max_length=255)
+    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premie_parameters')
+    parameter_naam = models.CharField(max_length=255)
 
     class Meta:
-        db_table = 'premium_parameters'
-        unique_together = ('product_module_id', 'parameter_name')
-        verbose_name_plural = 'Premium Parameters'
+        db_table = 'premie_parameters'
+        unique_together = ('product_module_id', 'parameter_naam')
+        verbose_name_plural = 'Premie Parameters'
 
     def __str__(self):
-        return f"{self.product_module_id} - {self.parameter_name}"
+        return f"{self.product_module_id} - {self.parameter_naam}"
 
 
-class ParameterOptions(models.Model):
-    option_id = models.AutoField(primary_key=True)
-    parameter_id = models.ForeignKey(PremiumParameters, on_delete=models.CASCADE, related_name='options')
-    option_value_text = models.CharField(max_length=255)
-    min_value = models.IntegerField(null=True, blank=True)
-    max_value = models.IntegerField(null=True, blank=True)
+class ParameterOpties(models.Model):
+    optie_id = models.AutoField(primary_key=True)
+    parameter_id = models.ForeignKey(PremieParameters, on_delete=models.CASCADE, related_name='opties')
+    optie_waarde_tekst = models.CharField(max_length=255)
+    min_waarde = models.IntegerField(null=True, blank=True)
+    max_waarde = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = 'parameter_options'
-        verbose_name_plural = 'Parameter Options'
+        db_table = 'parameter_opties'
+        verbose_name_plural = 'Parameter Opties'
 
     def __str__(self):
-        return f"{self.parameter_id} - {self.option_value_text}"
+        return f"{self.parameter_id} - {self.optie_waarde_tekst}"
 
 
-class PremiumRates(models.Model):
+class Premies(models.Model):
     BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
 
-    rate_id = models.AutoField(primary_key=True)
-    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premium_rates')
-    level_id = models.ForeignKey(CoverageLevels, on_delete=models.CASCADE, related_name='premium_rates')
-    premium_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='EUR')
-    billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
-    parameter_options = models.ManyToManyField(
-        ParameterOptions,
-        through='RateParameterMapping',
-        related_name='premium_rates'
+    premie_id = models.AutoField(primary_key=True)
+    product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='premies')
+    level_id = models.ForeignKey(DekkingsNiveaus, on_delete=models.CASCADE, related_name='premies')
+    premie = models.DecimalField(max_digits=10, decimal_places=2)
+    valuta = models.CharField(max_length=3, default='EUR')
+    termijn = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
+    parameter_opties = models.ManyToManyField(
+        ParameterOpties,
+        through='PremieParamaterMapping',
+        related_name='premies'
     )
 
     class Meta:
-        db_table = 'premium_rates'
-        verbose_name_plural = 'Premium Rates'
+        db_table = 'premies'
+        verbose_name_plural = 'Premies'
 
     def __str__(self):
-        return f"{self.level_id} - €{self.premium_amount}/{self.billing_cycle}"
+        return f"{self.level_id} - €{self.premie}/{self.termijn}"
 
 
-class RateParameterMapping(models.Model):
-    rate_id = models.ForeignKey(PremiumRates, on_delete=models.CASCADE)
-    option_id = models.ForeignKey(ParameterOptions, on_delete=models.CASCADE)
+class PremieParamaterMapping(models.Model):
+    premie_id = models.ForeignKey(Premies, on_delete=models.CASCADE)
+    optie_id = models.ForeignKey(ParameterOpties, on_delete=models.CASCADE)
 
     class Meta:
-        db_table = 'rate_parameter_mapping'
-        unique_together = ('rate_id', 'option_id')
-        verbose_name_plural = 'Rate Parameter Mappings'
+        db_table = 'premie_parameter_mapping'
+        unique_together = ('premie_id', 'optie_id')
+        verbose_name_plural = 'Premie Parameter Mappings'
 
     def __str__(self):
-        return f"{self.rate_id}"
+        return f"{self.premie_id}"
 
 
 class Polissen(models.Model):
@@ -354,7 +354,7 @@ class PolisModules(models.Model):
     polis_module_id = models.AutoField(primary_key=True)
     polis_id = models.ForeignKey(Polissen, on_delete=models.CASCADE, related_name='polis_modules')
     product_module_id = models.ForeignKey(ProductModules, on_delete=models.CASCADE, related_name='polis_modules')
-    level_id = models.ForeignKey(CoverageLevels, on_delete=models.CASCADE, related_name='polis_modules')
+    level_id = models.ForeignKey(DekkingsNiveaus, on_delete=models.CASCADE, related_name='polis_modules')
 
     class Meta:
         db_table = 'polis_modules'
@@ -367,7 +367,7 @@ class PolisModules(models.Model):
 class PolisOpties(models.Model):
     polis_optie_id = models.AutoField(primary_key=True)
     polis_id = models.ForeignKey(Polissen, on_delete=models.CASCADE, related_name='polis_opties')
-    option_id = models.ForeignKey(ParameterOptions, on_delete=models.CASCADE, related_name='polis_opties')
+    option_id = models.ForeignKey(ParameterOpties, on_delete=models.CASCADE, related_name='polis_opties')
 
     class Meta:
         db_table = 'polis_opties'
