@@ -13,23 +13,27 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - POSTGRES_DB=expat_insurance
-      - POSTGRES_USER=expat_user
-      - POSTGRES_PASSWORD=expat_password_local
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_HOST=${DB_HOST}
+      - POSTGRES_PORT=${DB_PORT}
     depends_on:
       db:
         condition: service_healthy
+        restart: true
+    env_file:
+      - .env
 
-  # PostgreSQL Database Service
+  # PostgreSQL Database Service 
+  #in production use nginx
   db:
     image: postgres:16
     container_name: expat_insurance_db
     environment:
-      POSTGRES_DB: expat_insurance
-      POSTGRES_USER: expat_user  
-      POSTGRES_PASSWORD: expat_password_local
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       # Optional: Performance tuning
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
@@ -39,7 +43,7 @@ services:
       - ./docker/db_init:/docker-entrypoint-initdb.d  # Initialization scripts
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U expat_user -d expat_insurance"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 30s
       timeout: 10s
       retries: 3
