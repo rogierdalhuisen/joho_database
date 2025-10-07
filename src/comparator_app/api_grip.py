@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
-from .models import Klanten, Aanvragen, Countries
+from .models import Klanten, Aanvragen, Landen
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class CustomerDataForm(forms.Form):
     def clean_nationaliteit_land_code(self):
         """Validate country code exists in database."""
         country_code = self.cleaned_data.get('nationaliteit_land_code')
-        if country_code and not Countries.objects.filter(country_code=country_code).exists():
+        if country_code and not Landen.objects.filter(land_code=country_code).exists():
             logger.warning(f"Unknown country code: {country_code}, defaulting to NLD")
             return 'NLD'
         return country_code or 'NLD'
@@ -73,7 +73,7 @@ class ApplicationDataForm(forms.Form):
     def clean_bestemmings_land_code(self):
         """Validate destination country code exists in database."""
         country_code = self.cleaned_data.get('bestemmings_land_code')
-        if country_code and not Countries.objects.filter(country_code=country_code).exists():
+        if country_code and not Landen.objects.filter(land_code=country_code).exists():
             raise forms.ValidationError(f"Unknown destination country code: {country_code}")
         return country_code
 

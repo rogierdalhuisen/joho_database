@@ -17,7 +17,7 @@ class Landen(models.Model):
 
 class Klanten(models.Model):
     klant_id = models.AutoField(primary_key=True)
-    email_adres = models.EmailField(unique=True)
+    emailadres = models.EmailField(unique=True)
     voorletters = models.CharField(max_length=10)
     achternaam = models.CharField(max_length=255)
     geboortedatum = models.DateField()
@@ -78,7 +78,7 @@ class VerzekeraarRegio(models.Model):
         verbose_name_plural = 'Verzekeraar Regio'
 
     def __str__(self):
-        return f"{self.provider_id.name} - {self.region_name}"
+        return f"{self.verzekeraar_id.naam} - {self.regio_naam}"
 
 
 class VerzekeraarRegioLanden(models.Model):
@@ -121,7 +121,7 @@ class Producten(models.Model):
     max_leeftijd_dekking = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
     target_doelgroepen = models.ManyToManyField(
         Doelgroepen,
-        through='ProductTargetAudiess ProductTargetDoelgroepen',
+        through='ProductTargetDoelgroepen',
         related_name='products'
     )
 
@@ -130,7 +130,7 @@ class Producten(models.Model):
         verbose_name_plural = 'Producten'
 
     def __str__(self):
-        return f"{self.provider_id.name} - {self.name}"
+        return f"{self.verzekeraar_id.naam} - {self.naam}"
 
 
 class ProductTargetDoelgroepen(models.Model):
@@ -301,7 +301,7 @@ class Premies(models.Model):
     termijn = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
     parameter_opties = models.ManyToManyField(
         ParameterOpties,
-        through='PremieParamaterMapping',
+        through='PremieParameterMapping',
         related_name='premies'
     )
 
@@ -313,7 +313,7 @@ class Premies(models.Model):
         return f"{self.level_id} - €{self.premie}/{self.termijn}"
 
 
-class PremieParamaterMapping(models.Model):
+class PremieParameterMapping(models.Model):
     premie_id = models.ForeignKey(Premies, on_delete=models.CASCADE)
     optie_id = models.ForeignKey(ParameterOpties, on_delete=models.CASCADE)
 
