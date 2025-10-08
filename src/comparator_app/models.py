@@ -56,8 +56,6 @@ class Verzekeraars(models.Model):
 
     verzekeraar_id = models.AutoField(primary_key=True)
     naam = models.CharField(max_length=255)
-    contact_details = models.JSONField(default=dict)
-    logo_url = models.CharField(max_length=500, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
 
     class Meta:
@@ -82,8 +80,8 @@ class VerzekeraarRegio(models.Model):
 
 
 class VerzekeraarRegioLanden(models.Model):
-    verzekeraar_regio_id = models.ForeignKey(VerzekeraarRegio, on_delete=models.CASCADE)
-    land_code = models.ForeignKey(Landen, on_delete=models.CASCADE)
+    verzekeraar_regio_id = models.ForeignKey(VerzekeraarRegio, on_delete=models.CASCADE, related_name='regio_landen')
+    land_code = models.ForeignKey(Landen, on_delete=models.CASCADE, related_name='regio_landen')
 
     class Meta:
         db_table = 'verzekeraar_regio_landen'
@@ -115,7 +113,6 @@ class Producten(models.Model):
     product_id = models.AutoField(primary_key=True)
     verzekeraar_id = models.ForeignKey(Verzekeraars, on_delete=models.CASCADE, related_name='products')
     naam = models.CharField(max_length=255)
-    beschrijving = models.TextField(blank=True)
     policy_type = models.CharField(max_length=20, choices=POLICY_TYPE_CHOICES)
     max_leeftijd_aanvraag = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
     max_leeftijd_dekking = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
@@ -134,8 +131,8 @@ class Producten(models.Model):
 
 
 class ProductTargetDoelgroepen(models.Model):
-    product_id = models.ForeignKey(Producten, on_delete=models.CASCADE)
-    doelgroep_id = models.ForeignKey(Doelgroepen, on_delete=models.CASCADE)
+    product_id = models.ForeignKey(Producten, on_delete=models.CASCADE, related_name='target_doelgroep_mappings')
+    doelgroep_id = models.ForeignKey(Doelgroepen, on_delete=models.CASCADE, related_name='product_target_mappings')
 
     class Meta:
         db_table = 'product_target_doelgroepen'
@@ -220,8 +217,8 @@ class DekkingsItems(models.Model):
 
 
 class ItemCategorieMapping(models.Model):
-    item_id = models.ForeignKey(DekkingsItems, on_delete=models.CASCADE)
-    categorie_id = models.ForeignKey(DekkingsCategorien, on_delete=models.CASCADE)
+    item_id = models.ForeignKey(DekkingsItems, on_delete=models.CASCADE, related_name='item_categorie_mappings')
+    categorie_id = models.ForeignKey(DekkingsCategorien, on_delete=models.CASCADE, related_name='item_categorie_mappings')
 
     class Meta:
         db_table = 'item_category_mapping'
@@ -314,8 +311,8 @@ class Premies(models.Model):
 
 
 class PremieParameterMapping(models.Model):
-    premie_id = models.ForeignKey(Premies, on_delete=models.CASCADE)
-    optie_id = models.ForeignKey(ParameterOpties, on_delete=models.CASCADE)
+    premie_id = models.ForeignKey(Premies, on_delete=models.CASCADE, related_name='parameter_mappings')
+    optie_id = models.ForeignKey(ParameterOpties, on_delete=models.CASCADE, related_name='premie_mappings')
 
     class Meta:
         db_table = 'premie_parameter_mapping'

@@ -114,10 +114,22 @@ class DekkingsCategorienAdmin(admin.ModelAdmin):
     search_fields = ('categorie_naam',)
 
 
+class ItemCategorieMappingInline(admin.TabularInline):
+    model = ItemCategorieMapping
+    extra = 1
+    verbose_name = 'Categorie'
+    verbose_name_plural = 'Categorieën'
+
+
 @admin.register(DekkingsItems)
 class DekkingsItemsAdmin(admin.ModelAdmin):
-    list_display = ('item_id', 'item_naam')
+    list_display = ('item_id', 'item_naam', 'get_categories')
     search_fields = ('item_naam',)
+    inlines = [ItemCategorieMappingInline]
+
+    def get_categories(self, obj):
+        return ", ".join([mapping.categorie_id.categorie_naam for mapping in obj.item_categorie_mappings.all()])
+    get_categories.short_description = 'Categorieën'
 
 
 @admin.register(DekkingsItemDetails)
