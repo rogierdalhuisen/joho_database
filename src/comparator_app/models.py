@@ -151,7 +151,12 @@ class ProductModules(models.Model):
         verbose_name_plural = 'Product Modules'
 
     def __str__(self):
-        return self.module_naam or f"Module ID: {self.product_module_id}"
+        # Haal de productnaam en verzekeraar op voor extra context
+        product_naam = self.product_id.naam
+        module_display = self.module_naam or f"Module ID: {self.product_module_id}"
+        
+        # Geef een duidelijke, samengestelde string terug
+        return f"{product_naam} - {module_display}"
 
 
 class DocumentChunk(models.Model):

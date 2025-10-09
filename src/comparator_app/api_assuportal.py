@@ -43,29 +43,29 @@ class ApplicationData(BaseModel):
         return v
 
 
-def parse_grip_record(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def parse_assuportal_record(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    Vertaalt één record van de GRIP API naar data voor Pydantic validatie.
+    Vertaalt één record van de Assuportal API naar data voor Pydantic validatie.
 
     Args:
-        record: Raw record van GRIP API
+        record: Raw record van Assuportal API
 
     Returns:
         Tuple van (customer_data, application_data) dictionaries
     """
-    # TODO: Pas de .get() veldnamen aan op basis van de JSON die je van GRIP krijgt
+    # TODO: Pas de .get() veldnamen aan op basis van de JSON die je van Assuportal krijgt
 
     customer_data = {
-        'emailadres': record.get('email') or record.get('emailAddress'),
-        'voorletters': record.get('initials') or record.get('firstName', '')[:10] if record.get('firstName') else None,
-        'achternaam': record.get('lastName') or record.get('surname'),
-        'geboortedatum': record.get('dateOfBirth') or record.get('birthDate'),
-        'nationaliteit_land_code': record.get('nationality')
+        'emailadres': record.get('emailadres_klant'),
+        'voorletters': record.get('voorletters'),
+        'achternaam': record.get('familienaam'),
+        'geboortedatum': record.get('geboortedatum'),
+        'nationaliteit_land_code': record.get('landcode_nationaliteit')
     }
 
     application_data = {
-        'bestemmings_land_code': record.get('destination') or record.get('destinationCountry'),
-        'vertrekdatum': record.get('departureDate') or record.get('startDate'),
+        'bestemmings_land_code': record.get('polis', {}).get('bestemming_land'),
+        'vertrekdatum': record.get('polis', {}).get('ingangsdatum')
     }
 
     # Verwijder keys waar de waarde None is
@@ -80,7 +80,7 @@ def process_and_save_api_data(api_records: List[Dict[str, Any]]) -> Tuple[int, i
     Loopt door alle records van de API, valideert met Pydantic en slaat ze op.
 
     Args:
-        api_records: Lista van records van GRIP API
+        api_records: Lista van records van Assuportal API
 
     Returns:
         Tuple van (aantal_successen, aantal_fouten)
@@ -89,11 +89,11 @@ def process_and_save_api_data(api_records: List[Dict[str, Any]]) -> Tuple[int, i
     error_count = 0
 
     for record in api_records:
-        record_id = record.get('id', 'N/A')  # TODO: Pas dit ID aan
+        record_id = record.get('uniek_id_van_assuportal', 'N/A')  # TODO: Pas dit ID aan
 
         try:
             # Parse en valideer met Pydantic
-            customer_data_dict, application_data_dict = parse_grip_record(record)
+            customer_data_dict, application_data_dict = parse_assuportal_record(record)
 
             customer_data = CustomerData(**customer_data_dict)
             application_data = ApplicationData(**application_data_dict)
@@ -117,76 +117,76 @@ def process_and_save_api_data(api_records: List[Dict[str, Any]]) -> Tuple[int, i
                 )
 
                 action = "aangemaakt" if created else "bijgewerkt"
-                logger.info(f"GRIP record {record_id}: Klant {action}, aanvraag aangemaakt")
+                logger.info(f"Assuportal record {record_id}: Klant {action}, aanvraag aangemaakt")
                 success_count += 1
 
         except ValidationError as e:
-            logger.error(f"Validatiefout voor GRIP record {record_id}: {e.errors()}")
+            logger.error(f"Validatiefout voor Assuportal record {record_id}: {e.errors()}")
             error_count += 1
         except Exception as e:
-            logger.error(f"Databasefout voor GRIP record {record_id}: {e}")
+            logger.error(f"Databasefout voor Assuportal record {record_id}: {e}")
             error_count += 1
 
     return success_count, error_count
 
 
-def fetch_data_from_grip() -> List[Dict[str, Any]]:
+def fetch_data_from_assuportal() -> List[Dict[str, Any]]:
     """
-    Voert de daadwerkelijke API-call uit naar GRIP.
+    Voert de daadwerkelijke API-call uit naar Assuportal.
 
     Returns:
         List van records, of lege list bij fout
     """
-    api_url = os.getenv('GRIP_API_URL')
-    api_key = os.getenv('GRIP_API_KEY')
+    api_url = os.getenv('ASSUPORTAL_API_URL')
+    api_key = os.getenv('ASSUPORTAL_API_KEY')
 
     if not api_url or not api_key:
-        logger.critical("GRIP_API_URL of GRIP_API_KEY is niet geconfigureerd.")
+        logger.critical("ASSUPORTAL_API_URL of ASSUPORTAL_API_KEY is niet geconfigureerd.")
         return []
 
-    # TODO: Pas de authenticatiemethode aan op basis van het antwoord van GRIP
+    # TODO: Pas de authenticatiemethode aan op basis van het antwoord van Assuportal
     headers = {
         'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json'
     }
 
-    # TODO: Voeg parameters toe voor filtering op basis van antwoord GRIP
+    # TODO: Voeg parameters toe voor filtering op basis van antwoord Assuportal
     params = {}
 
     try:
-        logger.info(f"API-call naar GRIP: {api_url}")
+        logger.info(f"API-call naar Assuportal: {api_url}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
         response.raise_for_status()  # Stopt bij een error (4xx/5xx)
 
         # TODO: Pas de .get() key aan naar de juiste key waarin de resultaten staan
-        return response.json().get('results', [])  # Aanname
+        return response.json().get('resultaten', [])  # Aanname
     except requests.exceptions.RequestException as e:
-        logger.error(f"API-call naar GRIP mislukt: {e}")
+        logger.error(f"API-call naar Assuportal mislukt: {e}")
         return []
 
 
 # Hoofdfunctie om aan te roepen (bijvoorbeeld vanuit een Django management command)
-def sync_grip_data():
+def sync_assuportal_data():
     """
-    Synchroniseert data van GRIP API naar de database.
+    Synchroniseert data van Assuportal API naar de database.
     """
-    logger.info("Start GRIP data synchronisatie")
-    records = fetch_data_from_grip()
+    logger.info("Start Assuportal data synchronisatie")
+    records = fetch_data_from_assuportal()
 
     if not records:
-        logger.warning("Geen records opgehaald van GRIP")
+        logger.warning("Geen records opgehaald van Assuportal")
         return
 
     success, errors = process_and_save_api_data(records)
-    logger.info(f"GRIP sync voltooid: {success} succesvol, {errors} fouten")
+    logger.info(f"Assuportal sync voltooid: {success} succesvol, {errors} fouten")
 
 
 # MISSING INFORMATION:
 """
-Benodigde informatie voor GRIP API integratie:
+Benodigde informatie voor Assuportal API integratie:
 
 1. API Endpoints:
-   - Wat is de base URL van de GRIP API?
+   - Wat is de base URL van de Assuportal API?
    - Welk endpoint levert klant- en aanvraaggegevens?
 
 2. Authenticatie:
@@ -199,8 +199,8 @@ Benodigde informatie voor GRIP API integratie:
    - Hoe zien landcodes eruit (NL, NLD, Netherlands)?
 
 4. Environment variabelen (.env):
-   GRIP_API_URL=https://api.grip.com/v1/applications
-   GRIP_API_KEY=your_api_key_here
+   ASSUPORTAL_API_URL=https://api.assuportal.com/v1/applications
+   ASSUPORTAL_API_KEY=your_api_key_here
 
 5. Rate Limiting:
    - Zijn er rate limits?
