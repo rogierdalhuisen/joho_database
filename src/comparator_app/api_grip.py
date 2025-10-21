@@ -159,7 +159,7 @@ def fetch_data_from_grip() -> List[Dict[str, Any]]:
         response.raise_for_status()  # Stopt bij een error (4xx/5xx)
 
         # TODO: Pas de .get() key aan naar de juiste key waarin de resultaten staan
-        return response.json().get('results', [])  # Aanname
+        return response.json().get('resul\ts', [])  # Aanname
     except requests.exceptions.RequestException as e:
         logger.error(f"API-call naar GRIP mislukt: {e}")
         return []
