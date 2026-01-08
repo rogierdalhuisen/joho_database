@@ -1,208 +1,552 @@
-import os
 import requests
 import logging
 from typing import Dict, Any, List, Tuple, Optional
-from datetime import date
-from pydantic import BaseModel, EmailStr, Field, field_validator, ValidationError
+from datetime import datetime, date
+import pytz
 from django.db import transaction
+from django.conf import settings
 
-from .models import Klanten, Aanvragen, Landen
+from .models import Relaties, Personen, Contracten, AdviesAanvragen
 
 logger = logging.getLogger(__name__)
 
-
-class CustomerData(BaseModel):
-    """Pydantic model voor klantgegevens validatie."""
-    emailadres: EmailStr
-    voorletters: Optional[str] = Field(None, max_length=10)
-    achternaam: str = Field(..., max_length=255)
-    geboortedatum: Optional[date] = None
-    nationaliteit_land_code: Optional[str] = Field(None, max_length=3)
-
-    @field_validator('nationaliteit_land_code')
-    @classmethod
-    def validate_country_code(cls, v: Optional[str]) -> str:  
-        """Valideer of de landcode bestaat in de database."""
-        if v and not Landen.objects.filter(land_code=v).exists():
-            logger.warning(f"Onbekende landcode: {v}, standaard naar NLD")
-            return 'NLD'
-        return v or 'NLD'
+# Load environment variables via Django settings
+def get_env(key, default=None):
+    """Get environment variable through Django settings."""
+    from decouple import config
+    return config(key, default=default)
 
 
-class ApplicationData(BaseModel):
-    """Pydantic model voor aanvraaggegevens validatie."""
-    bestemmings_land_code: Optional[str] = Field(None, max_length=3)
-    vertrekdatum: Optional[date] = None
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-    @field_validator('bestemmings_land_code')
-    @classmethod
-    def validate_destination_country(cls, v: Optional[str]) -> Optional[str]:
-        """Valideer of de bestemmingslandcode bestaat in de database."""
-        if v and not Landen.objects.filter(land_code=v).exists():
-            raise ValueError(f"Onbekende bestemmingslandcode: {v}")
-        return v
-
-
-def parse_assuportal_record(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def convert_invalid_date(date_string: Optional[str]) -> Optional[date]:
     """
-    Vertaalt één record van de Assuportal API naar data voor Pydantic validatie.
+    Converteer datum string naar date object, of None bij ongeldige datum.
 
     Args:
-        record: Raw record van Assuportal API
+        date_string: Datum string uit API (bijv. "2020-01-15" of "0000-00-00")
 
     Returns:
-        Tuple van (customer_data, application_data) dictionaries
+        date object of None
     """
-    # TODO: Pas de .get() veldnamen aan op basis van de JSON die je van Assuportal krijgt
+    if not date_string or date_string in ['0000-00-00', '']:
+        return None
 
-    customer_data = {
-        'emailadres': record.get('emailadres_klant'),
-        'voorletters': record.get('voorletters'),
-        'achternaam': record.get('familienaam'),
-        'geboortedatum': record.get('geboortedatum'),
-        'nationaliteit_land_code': record.get('landcode_nationaliteit')
-    }
-
-    application_data = {
-        'bestemmings_land_code': record.get('polis', {}).get('bestemming_land'),
-        'vertrekdatum': record.get('polis', {}).get('ingangsdatum')
-    }
-
-    # Verwijder keys waar de waarde None is
-    clean_customer_data = {k: v for k, v in customer_data.items() if v is not None}
-    clean_application_data = {k: v for k, v in application_data.items() if v is not None}
-
-    return clean_customer_data, clean_application_data
+    try:
+        return datetime.strptime(date_string, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        logger.warning(f"Kon datum niet parsen: {date_string}")
+        return None
 
 
-def process_and_save_api_data(api_records: List[Dict[str, Any]]) -> Tuple[int, int]:
+def convert_invalid_datetime(datetime_string: Optional[str]) -> Optional[datetime]:
     """
-    Loopt door alle records van de API, valideert met Pydantic en slaat ze op.
+    Converteer datetime string naar datetime object, of None bij ongeldige datetime.
 
     Args:
-        api_records: Lista van records van Assuportal API
+        datetime_string: Datetime string uit API (bijv. "2020-01-15 14:30:00" of "0000-00-00 00:00:00")
 
     Returns:
-        Tuple van (aantal_successen, aantal_fouten)
+        datetime object of None (timezone-aware)
     """
-    success_count = 0
-    error_count = 0
+    if not datetime_string or datetime_string in ['0000-00-00 00:00:00', '', '0000-00-00']:
+        return None
 
-    for record in api_records:
-        record_id = record.get('uniek_id_van_assuportal', 'N/A')  # TODO: Pas dit ID aan
-
-        try:
-            # Parse en valideer met Pydantic
-            customer_data_dict, application_data_dict = parse_assuportal_record(record)
-
-            customer_data = CustomerData(**customer_data_dict)
-            application_data = ApplicationData(**application_data_dict)
-
-            # Opslaan in de database
-            with transaction.atomic():
-                customer, created = Klanten.objects.update_or_create(
-                    emailadres=customer_data.emailadres,
-                    defaults={
-                        'voorletters': customer_data.voorletters,
-                        'achternaam': customer_data.achternaam,
-                        'geboortedatum': customer_data.geboortedatum,
-                        'nationaliteit_land_code_id': customer_data.nationaliteit_land_code
-                    }
-                )
-
-                Aanvragen.objects.create(
-                    klant_id=customer,
-                    bestemmings_land_code_id=application_data.bestemmings_land_code,
-                    vertrekdatum=application_data.vertrekdatum
-                )
-
-                action = "aangemaakt" if created else "bijgewerkt"
-                logger.info(f"Assuportal record {record_id}: Klant {action}, aanvraag aangemaakt")
-                success_count += 1
-
-        except ValidationError as e:
-            logger.error(f"Validatiefout voor Assuportal record {record_id}: {e.errors()}")
-            error_count += 1
-        except Exception as e:
-            logger.error(f"Databasefout voor Assuportal record {record_id}: {e}")
-            error_count += 1
-
-    return success_count, error_count
+    try:
+        from django.utils import timezone
+        # Parse as naive datetime
+        naive_dt = datetime.strptime(datetime_string, '%Y-%m-%d %H:%M:%S')
+        # Make timezone-aware (assume UTC from API)
+        return timezone.make_aware(naive_dt, pytz.UTC)
+    except (ValueError, TypeError):
+        logger.warning(f"Kon datetime niet parsen: {datetime_string}")
+        return None
 
 
-def fetch_data_from_assuportal() -> List[Dict[str, Any]]:
+# ============================================================================
+# API FETCH FUNCTIONS
+# ============================================================================
+
+def fetch_relaties_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
     """
-    Voert de daadwerkelijke API-call uit naar Assuportal.
+    Haal een pagina met relaties op van de Assuportal API (LIST endpoint).
+
+    Args:
+        page: Paginanummer (start bij 1)
+        size: Aantal records per pagina
 
     Returns:
-        List van records, of lege list bij fout
+        JSON response van de API of lege dict bij fout
     """
-    api_url = os.getenv('ASSUPORTAL_API_URL')
-    api_key = os.getenv('ASSUPORTAL_API_KEY')
+    api_url = get_env('ASSUPORTAL_RELATIES')
+    api_token = get_env('ASSUPORTAL_API_TOKEN')
 
-    if not api_url or not api_key:
-        logger.critical("ASSUPORTAL_API_URL of ASSUPORTAL_API_KEY is niet geconfigureerd.")
-        return []
+    if not api_url or not api_token:
+        logger.critical("ASSUPORTAL_RELATIES of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
+        return {}
 
-    # TODO: Pas de authenticatiemethode aan op basis van het antwoord van Assuportal
     headers = {
-        'Authorization': f'Bearer {api_key}',
+        'Authorization': f'Bearer {api_token}',
         'Content-Type': 'application/json'
     }
 
-    # TODO: Voeg parameters toe voor filtering op basis van antwoord Assuportal
-    params = {}
+    params = {
+        'page': page,
+        'size': size
+    }
 
     try:
-        logger.info(f"API-call naar Assuportal: {api_url}")
+        logger.info(f"Fetching relaties: pagina {page}, size {size}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()  # Stopt bij een error (4xx/5xx)
-
-        # TODO: Pas de .get() key aan naar de juiste key waarin de resultaten staan
-        return response.json().get('resultaten', [])  # Aanname
+        response.raise_for_status()
+        return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"API-call naar Assuportal mislukt: {e}")
-        return []
+        logger.error(f"API-call naar Relaties mislukt (pagina {page}): {e}")
+        return {}
 
 
-# Hoofdfunctie om aan te roepen (bijvoorbeeld vanuit een Django management command)
-def sync_assuportal_data():
+def fetch_relatie_detail(relatie_id: int) -> Dict[str, Any]:
     """
-    Synchroniseert data van Assuportal API naar de database.
+    Haal volledige details van één relatie op (DETAIL endpoint).
+
+    Args:
+        relatie_id: Het ID van de relatie
+
+    Returns:
+        JSON response van de API of lege dict bij fout
     """
-    logger.info("Start Assuportal data synchronisatie")
-    records = fetch_data_from_assuportal()
+    api_url = get_env('ASSUPORTAL_RELATIES')
+    api_token = get_env('ASSUPORTAL_API_TOKEN')
 
-    if not records:
-        logger.warning("Geen records opgehaald van Assuportal")
-        return
+    if not api_url or not api_token:
+        logger.critical("ASSUPORTAL_RELATIES of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
+        return {}
 
-    success, errors = process_and_save_api_data(records)
-    logger.info(f"Assuportal sync voltooid: {success} succesvol, {errors} fouten")
+    headers = {
+        'Authorization': f'Bearer {api_token}',
+        'Content-Type': 'application/json'
+    }
+
+    detail_url = f"{api_url}/{relatie_id}"
+
+    try:
+        response = requests.get(detail_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API-call naar Relatie detail {relatie_id} mislukt: {e}")
+        return {}
 
 
-# MISSING INFORMATION:
-"""
-Benodigde informatie voor Assuportal API integratie:
+def fetch_contracten_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
+    """
+    Haal een pagina met contracten op van de Assuportal API (LIST endpoint).
 
-1. API Endpoints:
-   - Wat is de base URL van de Assuportal API?
-   - Welk endpoint levert klant- en aanvraaggegevens?
+    Args:
+        page: Paginanummer (start bij 1)
+        size: Aantal records per pagina
 
-2. Authenticatie:
-   - Welke authenticatiemethode (Bearer token, API key header, Basic auth)?
-   - Waar krijg je de API credentials?
+    Returns:
+        JSON response van de API of lege dict bij fout
+    """
+    api_url = get_env('ASSUPORTAL_CONTRACTEN')
+    api_token = get_env('ASSUPORTAL_API_TOKEN')
 
-3. Data Structure:
-   - Wat zijn de exacte veldnamen in de JSON response?
-   - Welk datumformaat gebruiken ze?
-   - Hoe zien landcodes eruit (NL, NLD, Netherlands)?
+    if not api_url or not api_token:
+        logger.critical("ASSUPORTAL_CONTRACTEN of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
+        return {}
 
-4. Environment variabelen (.env):
-   ASSUPORTAL_API_URL=https://api.assuportal.com/v1/applications
-   ASSUPORTAL_API_KEY=your_api_key_here
+    headers = {
+        'Authorization': f'Bearer {api_token}',
+        'Content-Type': 'application/json'
+    }
 
-5. Rate Limiting:
-   - Zijn er rate limits?
-   - Moeten we pagination gebruiken?
-"""
+    params = {
+        'page': page,
+        'size': size
+    }
+
+    try:
+        logger.info(f"Fetching contracten: pagina {page}, size {size}")
+        response = requests.get(api_url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API-call naar Contracten mislukt (pagina {page}): {e}")
+        return {}
+
+
+def fetch_contract_detail(contract_id: int) -> Dict[str, Any]:
+    """
+    Haal volledige details van één contract op (DETAIL endpoint).
+
+    Args:
+        contract_id: Het ID van het contract
+
+    Returns:
+        JSON response van de API of lege dict bij fout
+    """
+    api_url = get_env('ASSUPORTAL_CONTRACTEN')
+    api_token = get_env('ASSUPORTAL_API_TOKEN')
+
+    if not api_url or not api_token:
+        logger.critical("ASSUPORTAL_CONTRACTEN of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
+        return {}
+
+    headers = {
+        'Authorization': f'Bearer {api_token}',
+        'Content-Type': 'application/json'
+    }
+
+    detail_url = f"{api_url}/{contract_id}"
+
+    try:
+        response = requests.get(detail_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API-call naar Contract detail {contract_id} mislukt: {e}")
+        return {}
+
+
+# ============================================================================
+# DATA EXTRACTION FUNCTIONS
+# ============================================================================
+
+def extract_email_list(api_data: Dict[str, Any]) -> List[str]:
+    """
+    Extraheer alle email adressen uit de detail API response.
+
+    Args:
+        api_data: De 'data' dict van de detail API response
+
+    Returns:
+        List van email adressen (strings)
+    """
+    emails = []
+
+    # Email uit email_adressen array
+    email_adressen = api_data.get('email_adressen', [])
+    for email_obj in email_adressen:
+        if email_obj.get('email'):
+            emails.append(email_obj['email'])
+
+    # Fallback: standaard_email uit LIST response
+    if not emails and api_data.get('standaard_email'):
+        emails.append(api_data['standaard_email'])
+
+    return emails
+
+
+# ============================================================================
+# SAVE FUNCTIONS
+# ============================================================================
+
+def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) -> Optional[Relaties]:
+    """
+    Sla een Relatie op vanuit API data (LIST of DETAIL).
+
+    Args:
+        api_data: De 'data' dict van de API response
+        use_detail: True als api_data van DETAIL endpoint komt (heeft personen, adressen, etc)
+
+    Returns:
+        Relaties object of None bij fout
+    """
+    try:
+        with transaction.atomic():
+            # Basis velden (beschikbaar in LIST en DETAIL)
+            relatie_id = api_data.get('id')
+            hoofdnaam = api_data.get('naam')
+            ts_aangemaakt = convert_invalid_datetime(api_data.get('ts_aangemaakt'))
+
+            # Email adressen
+            if use_detail:
+                email_adressen = extract_email_list(api_data)
+            else:
+                # LIST response heeft alleen standaard_email
+                standaard_email = api_data.get('standaard_email')
+                email_adressen = [standaard_email] if standaard_email else []
+
+            # Update or create Relatie
+            relatie, created = Relaties.objects.update_or_create(
+                relatie_id=relatie_id,
+                defaults={
+                    'hoofdnaam': hoofdnaam,
+                    'ts_aangemaakt': ts_aangemaakt,
+                    'email_adressen': email_adressen,
+                    'source': 'api'
+                }
+            )
+
+            action = "aangemaakt" if created else "bijgewerkt"
+            logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+
+            # Als DETAIL: sla ook Personen op
+            if use_detail:
+                personen_data = api_data.get('personen', [])
+
+                # Verwijder oude personen (voor re-sync)
+                relatie.personen.all().delete()
+
+                # Voeg nieuwe personen toe
+                for persoon in personen_data:
+                    Personen.objects.create(
+                        relatie=relatie,
+                        api_persoon_id=persoon.get('id'),
+                        persoon_naam=persoon.get('naam', ''),
+                        persoon_email=persoon.get('email')  # Kan None zijn
+                    )
+
+                logger.debug(f"  → {len(personen_data)} personen opgeslagen")
+
+            return relatie
+
+    except Exception as e:
+        logger.error(f"Fout bij opslaan Relatie {api_data.get('id')}: {e}")
+        return None
+
+
+def save_contract_from_api(api_data: Dict[str, Any]) -> Optional[Contracten]:
+    """
+    Sla een Contract op vanuit API data.
+
+    Args:
+        api_data: De 'data' dict van de API response (LIST of DETAIL)
+
+    Returns:
+        Contracten object of None bij fout
+    """
+    try:
+        contract_id = api_data.get('id')
+        relatie_id = api_data.get('relatie_id')
+
+        # Check of Relatie bestaat
+        try:
+            relatie = Relaties.objects.get(relatie_id=relatie_id)
+        except Relaties.DoesNotExist:
+            logger.warning(f"Contract {contract_id}: Relatie {relatie_id} niet gevonden, skip")
+            return None
+
+        with transaction.atomic():
+            # Datum conversies
+            datum_ingang = convert_invalid_date(api_data.get('datum_ingang'))
+            ts_aangemaakt = convert_invalid_datetime(api_data.get('ts_aangemaakt'))
+            ts_gewijzigd = convert_invalid_datetime(api_data.get('ts_gewijzigd'))
+
+            # Update or create Contract
+            contract, created = Contracten.objects.update_or_create(
+                contract_id=contract_id,
+                defaults={
+                    'polisnummer': api_data.get('polisnummer', ''),
+                    'branche': api_data.get('branche'),
+                    'relatie': relatie,
+                    'datum_ingang': datum_ingang,
+                    'ts_aangemaakt': ts_aangemaakt,
+                    'ts_gewijzigd': ts_gewijzigd
+                }
+            )
+
+            action = "aangemaakt" if created else "bijgewerkt"
+            logger.info(f"Contract {contract_id} ({api_data.get('polisnummer')}): {action}")
+
+            return contract
+
+    except Exception as e:
+        logger.error(f"Fout bij opslaan Contract {api_data.get('id')}: {e}")
+        return None
+
+
+# ============================================================================
+# MATCHING FUNCTION FOR ADVIESAANVRAGEN
+# ============================================================================
+
+def find_or_create_relatie_by_email(email: str) -> Relaties:
+    """
+    Zoek een Relatie op basis van email, of maak een nieuwe aan.
+
+    Deze functie wordt gebruikt wanneer een AdviesAanvraag binnenkomt met een email.
+    Het zoekt in:
+    1. Relaties.email_adressen JSONField
+    2. Personen.persoon_email
+
+    Als geen match: maak nieuwe Relatie aan met alleen email.
+
+    Args:
+        email: Email adres van de AdviesAanvraag
+
+    Returns:
+        Relaties object (bestaand of nieuw)
+    """
+    # Zoek in Relaties.email_adressen JSONField
+    # Django JSONField contains lookup
+    relatie = Relaties.objects.filter(email_adressen__contains=[email]).first()
+
+    if relatie:
+        logger.info(f"Email {email} gevonden in bestaande Relatie {relatie.relatie_id}")
+        return relatie
+
+    # Zoek in Personen.persoon_email
+    persoon = Personen.objects.filter(persoon_email=email).first()
+    if persoon:
+        logger.info(f"Email {email} gevonden in Persoon {persoon.persoon_id}, linked to Relatie {persoon.relatie.relatie_id}")
+        return persoon.relatie
+
+    # Geen match: maak nieuwe Relatie
+    logger.info(f"Email {email} niet gevonden, nieuwe Relatie aanmaken")
+    relatie = Relaties.objects.create(
+        relatie_id=None,  # Nog geen API ID
+        hoofdnaam=None,
+        email_adressen=[email],
+        source='adviesaanvraag'
+    )
+
+    return relatie
+
+
+# ============================================================================
+# MAIN SYNC FUNCTIONS
+# ============================================================================
+
+def sync_relaties(page_size: int = 50, use_detail: bool = False, max_pages: Optional[int] = None) -> Tuple[int, int]:
+    """
+    Synchroniseer Relaties van Assuportal API naar database.
+
+    Args:
+        page_size: Aantal records per pagina
+        use_detail: True om DETAIL endpoint te gebruiken (langzaam maar volledig)
+        max_pages: Maximaal aantal paginas (voor testen), None = alle
+
+    Returns:
+        Tuple van (success_count, error_count)
+    """
+    logger.info("=== Start Relaties synchronisatie ===")
+
+    success_count = 0
+    error_count = 0
+    page = 1
+
+    while True:
+        # Stop als max_pages bereikt
+        if max_pages and page > max_pages:
+            logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
+            break
+
+        # Haal lijst op
+        response = fetch_relaties_list(page=page, size=page_size)
+
+        if not response or response.get('result') != 'ok':
+            logger.error(f"Geen geldige response voor pagina {page}")
+            break
+
+        data_list = response.get('data', [])
+        meta = response.get('meta', {})
+
+        if not data_list:
+            logger.info(f"Geen data op pagina {page}, stoppen")
+            break
+
+        logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} relaties")
+
+        # Verwerk elke relatie
+        for relatie_data in data_list:
+            relatie_id = relatie_data.get('id')
+
+            # Als use_detail: haal volledige data op
+            if use_detail:
+                detail_response = fetch_relatie_detail(relatie_id)
+                if detail_response and detail_response.get('result') == 'ok':
+                    detail_data = detail_response.get('data', {})
+                    result = save_relatie_from_api(detail_data, use_detail=True)
+                else:
+                    logger.error(f"Kon detail niet ophalen voor Relatie {relatie_id}")
+                    result = None
+            else:
+                # Gebruik LIST data
+                result = save_relatie_from_api(relatie_data, use_detail=False)
+
+            if result:
+                success_count += 1
+            else:
+                error_count += 1
+
+        # Check of er een volgende pagina is
+        current_page = meta.get('current_page')
+        last_page = meta.get('last_page')
+
+        if current_page and last_page and current_page >= last_page:
+            logger.info("Laatste pagina bereikt")
+            break
+
+        page += 1
+
+    logger.info(f"=== Relaties sync voltooid: {success_count} succesvol, {error_count} fouten ===")
+    return success_count, error_count
+
+
+def sync_contracten(page_size: int = 50, max_pages: Optional[int] = None) -> Tuple[int, int, int]:
+    """
+    Synchroniseer Contracten van Assuportal API naar database.
+
+    Args:
+        page_size: Aantal records per pagina
+        max_pages: Maximaal aantal paginas (voor testen), None = alle
+
+    Returns:
+        Tuple van (success_count, error_count, skipped_count)
+    """
+    logger.info("=== Start Contracten synchronisatie ===")
+
+    success_count = 0
+    error_count = 0
+    skipped_count = 0
+    page = 1
+
+    while True:
+        # Stop als max_pages bereikt
+        if max_pages and page > max_pages:
+            logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
+            break
+
+        # Haal lijst op
+        response = fetch_contracten_list(page=page, size=page_size)
+
+        if not response or response.get('result') != 'ok':
+            logger.error(f"Geen geldige response voor pagina {page}")
+            break
+
+        data_list = response.get('data', [])
+        meta = response.get('meta', {})
+
+        if not data_list:
+            logger.info(f"Geen data op pagina {page}, stoppen")
+            break
+
+        logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} contracten")
+
+        # Verwerk elk contract
+        for contract_data in data_list:
+            result = save_contract_from_api(contract_data)
+
+            if result:
+                success_count += 1
+            elif result is None and contract_data.get('relatie_id'):
+                # None betekent Relatie niet gevonden (zie save_contract_from_api)
+                skipped_count += 1
+            else:
+                error_count += 1
+
+        # Check of er een volgende pagina is
+        current_page = meta.get('current_page')
+        last_page = meta.get('last_page')
+
+        if current_page and last_page and current_page >= last_page:
+            logger.info("Laatste pagina bereikt")
+            break
+
+        page += 1
+
+    logger.info(f"=== Contracten sync voltooid: {success_count} succesvol, {error_count} fouten, {skipped_count} geskipt ===")
+    return success_count, error_count, skipped_count

@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 try:
-    from decouple import config, AutoConfig
+    from decouple import AutoConfig
+    # AutoConfig searches for .env in current dir and parent directories
+    config = AutoConfig(search_path=Path(__file__).resolve().parent.parent.parent)
 except ImportError:
     # Fallback if decouple is not installed correctly
     class Config:

@@ -14,36 +14,77 @@ class Countries(models.Model):
         return f"{self.country_name} ({self.country_code})"
 
 
-class Klanten(models.Model):
-    klant_id = models.AutoField(primary_key=True)
-    emailadres = models.EmailField(unique=True)
-    voorletters = models.CharField(max_length=10)
-    achternaam = models.CharField(max_length=255)
-    geboortedatum = models.DateField()
-    nationaliteit_land_code = models.ForeignKey(Countries, on_delete=models.PROTECT, related_name='nationals')
+class Relaties(models.Model):
+    SOURCE_CHOICES = [
+        ('api', 'Assuportal API'),
+        ('adviesaanvraag', 'Advies Aanvraag'),
+    ]
+
+    relatie_id = models.IntegerField(null=True, blank=True, unique=True, db_index=True)
+    ts_aangemaakt = models.DateTimeField(null=True, blank=True)
+    hoofdnaam = models.CharField(max_length=255, null=True, blank=True)
+    email_adressen = models.JSONField(default=list, blank=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='api')
     aangemaakt_op = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'klanten'
-        verbose_name_plural = 'Klanten'
+        db_table = 'relaties'
+        verbose_name_plural = 'Relaties'
 
     def __str__(self):
-        return f"{self.voorletters} {self.achternaam} ({self.emailadres})"
+        if self.hoofdnaam:
+            return f"{self.hoofdnaam} (ID: {self.relatie_id or 'Nieuw'})"
+        elif self.email_adressen:
+            return f"Relatie - {self.email_adressen[0] if self.email_adressen else 'Geen email'}"
+        return f"Relatie ID: {self.relatie_id or self.pk}"
 
 
-class Aanvragen(models.Model):
+class Personen(models.Model):
+    persoon_id = models.AutoField(primary_key=True)
+    relatie = models.ForeignKey(Relaties, on_delete=models.CASCADE, related_name='personen')
+    api_persoon_id = models.IntegerField(null=True, blank=True)
+    persoon_naam = models.CharField(max_length=255)
+    persoon_email = models.EmailField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'personen'
+        verbose_name_plural = 'Personen'
+
+    def __str__(self):
+        return f"{self.persoon_naam} ({self.relatie.hoofdnaam})"
+
+
+class AdviesAanvragen(models.Model):
     aanvraag_id = models.AutoField(primary_key=True)
-    klant_id = models.ForeignKey(Klanten, on_delete=models.CASCADE, related_name='aanvragen')
+    relatie = models.ForeignKey(Relaties, on_delete=models.CASCADE, related_name='adviesaanvragen')
+    email_identifier = models.EmailField()
     bestemmings_land_code = models.ForeignKey(Countries, on_delete=models.PROTECT, related_name='aanvragen_bestemming')
     vertrekdatum = models.DateField()
     ingediend_op = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'aanvragen'
-        verbose_name_plural = 'Aanvragen'
+        db_table = 'adviesaanvragen'
+        verbose_name_plural = 'Advies Aanvragen'
 
     def __str__(self):
-        return f"Aanvraag {self.aanvraag_id} - {self.klant_id} naar {self.bestemmings_land_code}"
+        return f"Aanvraag {self.aanvraag_id} - {self.relatie} naar {self.bestemmings_land_code}"
+
+
+class Contracten(models.Model):
+    contract_id = models.IntegerField(primary_key=True)
+    polisnummer = models.CharField(max_length=255, blank=True)
+    branche = models.CharField(max_length=255, null=True, blank=True)
+    relatie = models.ForeignKey(Relaties, on_delete=models.PROTECT, related_name='contracten')
+    datum_ingang = models.DateField(null=True, blank=True)
+    ts_aangemaakt = models.DateTimeField(null=True, blank=True)
+    ts_gewijzigd = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'contracten'
+        verbose_name_plural = 'Contracten'
+
+    def __str__(self):
+        return f"Contract {self.polisnummer} - {self.relatie}"
 
 
 class Providers(models.Model):
@@ -166,7 +207,7 @@ class Polissen(models.Model):
 
     polis_id = models.AutoField(primary_key=True)
     polisnummer = models.CharField(max_length=255, unique=True)
-    klant_id = models.ForeignKey(Klanten, on_delete=models.CASCADE, related_name='polissen')
+    relatie = models.ForeignKey(Relaties, on_delete=models.CASCADE, related_name='polissen')
     product_id = models.ForeignKey(Products, on_delete=models.CASCADE, related_name='polissen')
     startdatum = models.DateField()
     totale_premie = models.DecimalField(max_digits=10, decimal_places=2)
@@ -177,7 +218,7 @@ class Polissen(models.Model):
         verbose_name_plural = 'Polissen'
 
     def __str__(self):
-        return f"Polis {self.polisnummer} - {self.klant_id}"
+        return f"Polis {self.polisnummer} - {self.relatie}"
 
 
 class BusinessRules(models.Model):

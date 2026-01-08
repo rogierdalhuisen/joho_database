@@ -1,8 +1,10 @@
 from django.contrib import admin
 from .models import (
     Countries,
-    Klanten,
-    Aanvragen,
+    Relaties,
+    Personen,
+    AdviesAanvragen,
+    Contracten,
     Providers,
     ProviderRegions,
     ProviderRegionCountries,
@@ -28,28 +30,57 @@ class TargetAudiencesAdmin(admin.ModelAdmin):
     search_fields = ('audience_name',)
 
 
-# --- Klant-gerelateerde Admin ---
-@admin.register(Klanten)
-class KlantenAdmin(admin.ModelAdmin):
-    list_display = ('klant_id', 'emailadres', 'voorletters', 'achternaam', 'geboortedatum', 'nationaliteit_land_code')
-    search_fields = ('emailadres', 'achternaam')
-    list_filter = ('nationaliteit_land_code', 'aangemaakt_op')
+# --- Relatie-gerelateerde Admin ---
+class PersonenInline(admin.TabularInline):
+    model = Personen
+    extra = 0
+    fields = ('api_persoon_id', 'persoon_naam', 'persoon_email')
+    show_change_link = True
+
+
+@admin.register(Relaties)
+class RelatiesAdmin(admin.ModelAdmin):
+    list_display = ('relatie_id', 'hoofdnaam', 'get_email_display', 'source', 'aangemaakt_op')
+    search_fields = ('hoofdnaam', 'relatie_id')
+    list_filter = ('source', 'aangemaakt_op')
     date_hierarchy = 'aangemaakt_op'
+    inlines = [PersonenInline]
+
+    def get_email_display(self, obj):
+        if obj.email_adressen:
+            return ', '.join(obj.email_adressen[:2])  # Show first 2 emails
+        return 'Geen email'
+    get_email_display.short_description = 'Email Adressen'
 
 
-@admin.register(Aanvragen)
-class AanvragenAdmin(admin.ModelAdmin):
-    list_display = ('aanvraag_id', 'klant_id', 'bestemmings_land_code', 'vertrekdatum', 'ingediend_op')
+@admin.register(Personen)
+class PersonenAdmin(admin.ModelAdmin):
+    list_display = ('persoon_id', 'persoon_naam', 'persoon_email', 'relatie', 'api_persoon_id')
+    search_fields = ('persoon_naam', 'persoon_email', 'relatie__hoofdnaam')
+    list_filter = ('relatie',)
+
+
+@admin.register(AdviesAanvragen)
+class AdviesAanvragenAdmin(admin.ModelAdmin):
+    list_display = ('aanvraag_id', 'relatie', 'email_identifier', 'bestemmings_land_code', 'vertrekdatum', 'ingediend_op')
     list_filter = ('bestemmings_land_code', 'ingediend_op')
-    search_fields = ('klant_id__emailadres', 'klant_id__achternaam')
+    search_fields = ('email_identifier', 'relatie__hoofdnaam')
     date_hierarchy = 'ingediend_op'
+
+
+@admin.register(Contracten)
+class ContractenAdmin(admin.ModelAdmin):
+    list_display = ('contract_id', 'polisnummer', 'relatie', 'branche', 'datum_ingang', 'ts_aangemaakt')
+    list_filter = ('branche', 'datum_ingang')
+    search_fields = ('polisnummer', 'relatie__hoofdnaam', 'relatie__relatie_id')
+    date_hierarchy = 'datum_ingang'
 
 
 @admin.register(Polissen)
 class PolissenAdmin(admin.ModelAdmin):
-    list_display = ('polis_id', 'polisnummer', 'klant_id', 'product_id', 'startdatum', 'totale_premie', 'status')
+    list_display = ('polis_id', 'polisnummer', 'relatie', 'product_id', 'startdatum', 'totale_premie', 'status')
     list_filter = ('status', 'product_id')
-    search_fields = ('polisnummer', 'klant_id__emailadres', 'klant_id__achternaam')
+    search_fields = ('polisnummer', 'relatie__hoofdnaam')
     date_hierarchy = 'startdatum'
 
 
