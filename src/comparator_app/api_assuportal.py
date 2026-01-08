@@ -21,7 +21,7 @@ class CustomerData(BaseModel):
 
     @field_validator('nationaliteit_land_code')
     @classmethod
-    def validate_country_code(cls, v: Optional[str]) -> str:
+    def validate_country_code(cls, v: Optional[str]) -> str:  
         """Valideer of de landcode bestaat in de database."""
         if v and not Landen.objects.filter(land_code=v).exists():
             logger.warning(f"Onbekende landcode: {v}, standaard naar NLD")
