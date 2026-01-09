@@ -287,17 +287,31 @@ def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) ->
             # Als DETAIL: sla ook Personen op
             if use_detail:
                 personen_data = api_data.get('personen', [])
+                email_adressen_data = api_data.get('email_adressen', [])
+
+                # Build lookup: persoon_id -> email
+                email_lookup = {}
+                for email_obj in email_adressen_data:
+                    persoon_id = email_obj.get('persoon_id')
+                    email = email_obj.get('email')
+                    if persoon_id and email:
+                        # Store first email per person (in case of multiple)
+                        if persoon_id not in email_lookup:
+                            email_lookup[persoon_id] = email
 
                 # Verwijder oude personen (voor re-sync)
                 relatie.personen.all().delete()
 
-                # Voeg nieuwe personen toe
+                # Voeg nieuwe personen toe met correct email
                 for persoon in personen_data:
+                    api_persoon_id = persoon.get('id')
+                    persoon_email = email_lookup.get(api_persoon_id)  # Look up by person ID
+
                     Personen.objects.create(
                         relatie=relatie,
-                        api_persoon_id=persoon.get('id'),
+                        api_persoon_id=api_persoon_id,
                         persoon_naam=persoon.get('naam', ''),
-                        persoon_email=persoon.get('email')  # Kan None zijn
+                        persoon_email=persoon_email
                     )
 
                 logger.debug(f"  → {len(personen_data)} personen opgeslagen")

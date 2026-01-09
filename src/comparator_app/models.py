@@ -197,30 +197,6 @@ class ProductModules(models.Model):
         return f"{product_name} - {module_display}"
 
 
-class Polissen(models.Model):
-    STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('pending', 'Pending'),
-        ('cancelled', 'Cancelled'),
-        ('expired', 'Expired'),
-    ]
-
-    polis_id = models.AutoField(primary_key=True)
-    polisnummer = models.CharField(max_length=255, unique=True)
-    relatie = models.ForeignKey(Relaties, on_delete=models.CASCADE, related_name='polissen')
-    product_id = models.ForeignKey(Products, on_delete=models.CASCADE, related_name='polissen')
-    startdatum = models.DateField()
-    totale_premie = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-
-    class Meta:
-        db_table = 'polissen'
-        verbose_name_plural = 'Polissen'
-
-    def __str__(self):
-        return f"Polis {self.polisnummer} - {self.relatie}"
-
-
 class BusinessRules(models.Model):
     SCOPE_ENTITY_CHOICES = [
         ('provider', 'Provider'),

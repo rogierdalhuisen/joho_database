@@ -124,22 +124,6 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='products', to='comparator_app.providers'),
         ),
         migrations.CreateModel(
-            name='Polissen',
-            fields=[
-                ('polis_id', models.AutoField(primary_key=True, serialize=False)),
-                ('polisnummer', models.CharField(max_length=255, unique=True)),
-                ('startdatum', models.DateField()),
-                ('totale_premie', models.DecimalField(decimal_places=2, max_digits=10)),
-                ('status', models.CharField(choices=[('active', 'Active'), ('pending', 'Pending'), ('cancelled', 'Cancelled'), ('expired', 'Expired')], default='pending', max_length=20)),
-                ('product_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='polissen', to='comparator_app.products')),
-                ('relatie', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='polissen', to='comparator_app.relaties')),
-            ],
-            options={
-                'verbose_name_plural': 'Polissen',
-                'db_table': 'polissen',
-            },
-        ),
-        migrations.CreateModel(
             name='Personen',
             fields=[
                 ('persoon_id', models.AutoField(primary_key=True, serialize=False)),

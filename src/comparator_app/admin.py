@@ -12,7 +12,6 @@ from .models import (
     Products,
     ProductTargetAudiences,
     ProductModules,
-    Polissen,
     BusinessRules
 )
 
@@ -74,15 +73,6 @@ class ContractenAdmin(admin.ModelAdmin):
     list_filter = ('branche', 'datum_ingang')
     search_fields = ('polisnummer', 'relatie__hoofdnaam', 'relatie__relatie_id')
     date_hierarchy = 'datum_ingang'
-
-
-@admin.register(Polissen)
-class PolissenAdmin(admin.ModelAdmin):
-    list_display = ('polis_id', 'polisnummer', 'relatie', 'product_id', 'startdatum', 'totale_premie', 'status')
-    list_filter = ('status', 'product_id')
-    search_fields = ('polisnummer', 'relatie__hoofdnaam')
-    date_hierarchy = 'startdatum'
-
 
 # --- Provider & Product Admin ---
 @admin.register(Providers)
