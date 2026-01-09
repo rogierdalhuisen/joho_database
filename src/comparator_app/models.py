@@ -154,7 +154,7 @@ class AdviesAanvragen(models.Model):
     bouwplaats_hoe_vaak = models.CharField(max_length=100, null=True, blank=True)  # pos 380
     gevaarlijke_stoffen = models.CharField(max_length=50, null=True, blank=True)  # pos 390
     toelichting_gevaarlijke_stoffen = models.TextField(null=True, blank=True)  # pos 400
-    interesse_internationale_aov = models.CharField(max_length=50, null=True, blank=True)  # pos 411
+    interesse_internationale_aov = models.TextField(null=True, blank=True)  # pos 411 - Can be long explanation
     geen_interesse_aov_reden = models.TextField(null=True, blank=True)  # pos 412
     functieomschrijving = models.CharField(max_length=200, null=True, blank=True)  # pos 413
     type_werkzaamheden = models.CharField(max_length=100, null=True, blank=True)  # pos 414
