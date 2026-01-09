@@ -61,10 +61,131 @@ class PersonenAdmin(admin.ModelAdmin):
 
 @admin.register(AdviesAanvragen)
 class AdviesAanvragenAdmin(admin.ModelAdmin):
-    list_display = ('aanvraag_id', 'relatie', 'email_identifier', 'bestemmings_land_code', 'vertrekdatum', 'ingediend_op')
-    list_filter = ('bestemmings_land_code', 'ingediend_op')
-    search_fields = ('email_identifier', 'relatie__hoofdnaam')
+    list_display = (
+        'aanvraag_id',
+        'get_naam',
+        'email',
+        'bestemming_land',
+        'huidig_woonland',
+        'vertrekdatum',
+        'interesse_zkv',
+        'ingediend_op'
+    )
+    list_filter = (
+        'interesse_zkv',
+        'interesse_aov',
+        'bestemming_land',
+        'huidig_woonland',
+        'situatie_type',
+        'referral_source',
+        'ingediend_op'
+    )
+    search_fields = (
+        'email',
+        'voorletters_roepnaam',
+        'achternaam',
+        'relatie__hoofdnaam',
+        'external_result_id'
+    )
     date_hierarchy = 'ingediend_op'
+    readonly_fields = ('external_result_id', 'form_id', 'aangemaakt_op', 'raw_form_data')
+
+    fieldsets = (
+        ('Metadata', {
+            'fields': ('aanvraag_id', 'external_result_id', 'form_id', 'relatie', 'ingediend_op', 'aangemaakt_op')
+        }),
+        ('Persoonlijke Gegevens', {
+            'fields': (
+                'advies_voor_mezelf',
+                'aanhef',
+                'voorletters_roepnaam',
+                'achternaam',
+                'geboortedatum',
+                'land_nationaliteit',
+                'email',
+                'telefoonnummer',
+                'vaste_woonplaats',
+            )
+        }),
+        ('Familie/Meerdere Verzekerden', {
+            'fields': (
+                'meerdere_verzekerden',
+                'partner_naam',
+                'partner_geboortedatum',
+                'partner_nationaliteit',
+                'kind1_naam',
+                'kind1_geboortedatum',
+                'kind2_naam',
+                'kind2_geboortedatum',
+                'kind3_naam',
+                'kind3_geboortedatum',
+                'kind4_naam',
+                'kind4_geboortedatum',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Situatie & Plannen', {
+            'fields': (
+                'situatie_type',
+                'bestemming_land',
+                'vertrekdatum',
+                'huidig_woonland',
+                'uitschrijven_brp',
+                'hoofdreden_verblijf',
+                'toelichting_hoofdreden',
+                'verwachte_duur_verblijf',
+                'toelichting_duur',
+            )
+        }),
+        ('Verzekeringen', {
+            'fields': (
+                'interesse_zkv',
+                'zkv_dekkingsvariant',
+                'zkv_eigen_risico_voorkeur',
+                'zkv_periode',
+                'interesse_aov',
+                'interesse_internationale_aov',
+                'andere_verzekeringen_interesse',
+            )
+        }),
+        ('Werk & Inkomen', {
+            'fields': (
+                'werk_omschrijving',
+                'loondienst_of_zelfstandig',
+                'bruto_salaris_inkomen',
+                'salaris_per_maand_jaar',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Medisch', {
+            'fields': (
+                'medische_bijzonderheden',
+                'medische_bijzonderheden_toelichting',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Marketing', {
+            'fields': (
+                'referral_source',
+                'referral_medium',
+                'referral_campaign',
+                'hoe_gevonden',
+                'welke_website',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Raw Data (Backup)', {
+            'fields': ('raw_form_data',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_naam(self, obj):
+        """Combineer voornaam en achternaam."""
+        naam = f"{obj.voorletters_roepnaam or ''} {obj.achternaam or ''}".strip()
+        return naam if naam else '-'
+    get_naam.short_description = 'Naam'
+    get_naam.admin_order_field = 'achternaam'
 
 
 @admin.register(Contracten)

@@ -248,6 +248,10 @@ def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) ->
     """
     Sla een Relatie op vanuit API data (LIST of DETAIL).
 
+    MERGE STRATEGIE: Als een relatie met dit email al bestaat vanuit een AdviesAanvraag
+    (relatie_id=None, source='adviesaanvraag'), dan wordt deze relatie ge-upgrade met
+    de API data in plaats van een nieuwe aan te maken.
+
     Args:
         api_data: De 'data' dict van de API response
         use_detail: True als api_data van DETAIL endpoint komt (heeft personen, adressen, etc)
@@ -270,19 +274,60 @@ def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) ->
                 standaard_email = api_data.get('standaard_email')
                 email_adressen = [standaard_email] if standaard_email else []
 
-            # Update or create Relatie
-            relatie, created = Relaties.objects.update_or_create(
-                relatie_id=relatie_id,
-                defaults={
-                    'hoofdnaam': hoofdnaam,
-                    'ts_aangemaakt': ts_aangemaakt,
-                    'email_adressen': email_adressen,
-                    'source': 'api'
-                }
-            )
+            # MERGE LOGICA: Check of er al een "orphaned" relatie bestaat
+            # Stap 1: Probeer te vinden op relatie_id
+            try:
+                relatie = Relaties.objects.get(relatie_id=relatie_id)
+                # Bestaande API relatie gevonden, update deze
+                relatie.hoofdnaam = hoofdnaam
+                relatie.ts_aangemaakt = ts_aangemaakt
+                relatie.email_adressen = email_adressen
+                relatie.source = 'api'
+                relatie.save()
+                action = "bijgewerkt (bestaande API relatie)"
+                logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
 
-            action = "aangemaakt" if created else "bijgewerkt"
-            logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+            except Relaties.DoesNotExist:
+                # Stap 2: Geen API relatie gevonden, check voor orphaned relatie met dit email
+                orphaned_relatie = None
+                if email_adressen:
+                    for email in email_adressen:
+                        # Zoek relatie die:
+                        # 1. Nog geen relatie_id heeft (None)
+                        # 2. Van formulier komt (source='adviesaanvraag')
+                        # 3. Dit email bevat
+                        orphaned_relatie = Relaties.objects.filter(
+                            relatie_id__isnull=True,
+                            source='adviesaanvraag',
+                            email_adressen__contains=[email]
+                        ).first()
+
+                        if orphaned_relatie:
+                            logger.info(f"MERGE: Orphaned relatie {orphaned_relatie.pk} matched met API relatie {relatie_id} via email {email}")
+                            break
+
+                if orphaned_relatie:
+                    # MERGE: Update de orphaned relatie met API data
+                    orphaned_relatie.relatie_id = relatie_id
+                    orphaned_relatie.hoofdnaam = hoofdnaam
+                    orphaned_relatie.ts_aangemaakt = ts_aangemaakt
+                    orphaned_relatie.email_adressen = email_adressen
+                    orphaned_relatie.source = 'api'
+                    orphaned_relatie.save()
+                    relatie = orphaned_relatie
+                    action = "ge-merged (formulier → API)"
+                    logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+                else:
+                    # Geen orphaned relatie gevonden, maak nieuwe aan
+                    relatie = Relaties.objects.create(
+                        relatie_id=relatie_id,
+                        hoofdnaam=hoofdnaam,
+                        ts_aangemaakt=ts_aangemaakt,
+                        email_adressen=email_adressen,
+                        source='api'
+                    )
+                    action = "aangemaakt (nieuwe API relatie)"
+                    logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
 
             # Als DETAIL: sla ook Personen op
             if use_detail:
