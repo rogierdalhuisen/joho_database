@@ -1,32 +1,31 @@
 from django.contrib import admin
 from .models import (
-    Countries,
+    Landen,
     Relaties,
     Personen,
     AdviesAanvragen,
     Contracten,
-    Providers,
-    ProviderRegions,
-    ProviderRegionCountries,
-    TargetAudiences,
-    Products,
-    ProductTargetAudiences,
-    ProductModules,
-    BusinessRules
+    VerzekeringRegio,
+    VerzekeringRegioLanden,
+    DoelGroepen,
+    Verzekeringen,
+    VerzekeringDoelGroepen,
+    VerzekeringModules,
+    BedrijfsRegels
 )
 
 
 # --- Support Tables Admin ---
-@admin.register(Countries)
-class CountriesAdmin(admin.ModelAdmin):
-    list_display = ('country_code', 'country_name')
-    search_fields = ('country_name', 'country_code')
+@admin.register(Landen)
+class LandenAdmin(admin.ModelAdmin):
+    list_display = ('land_code', 'land_naam')
+    search_fields = ('land_naam', 'land_code')
 
 
-@admin.register(TargetAudiences)
-class TargetAudiencesAdmin(admin.ModelAdmin):
-    list_display = ('audience_id', 'audience_name')
-    search_fields = ('audience_name',)
+@admin.register(DoelGroepen)
+class DoelGroepenAdmin(admin.ModelAdmin):
+    list_display = ('doelgroep_id', 'doelgroep_naam')
+    search_fields = ('doelgroep_naam',)
 
 
 # --- Relatie-gerelateerde Admin ---
@@ -195,115 +194,104 @@ class ContractenAdmin(admin.ModelAdmin):
     search_fields = ('polisnummer', 'relatie__hoofdnaam', 'relatie__relatie_id')
     date_hierarchy = 'datum_ingang'
 
-# --- Provider & Product Admin ---
-@admin.register(Providers)
-class ProvidersAdmin(admin.ModelAdmin):
-    list_display = ('provider_id', 'name', 'status', 'get_products_count', 'get_regions_count')
-    list_filter = ('status',)
-    search_fields = ('name',)
 
-    def get_products_count(self, obj):
-        count = obj.products.count()
+# --- Verzekering Regio & Verzekering Admin ---
+@admin.register(VerzekeringRegio)
+class VerzekeringRegioAdmin(admin.ModelAdmin):
+    list_display = ('verzekering_regio_id', 'verzekeraar_naam', 'regio_naam', 'status', 'get_verzekeringen_count', 'get_landen_count')
+    list_filter = ('status', 'verzekeraar_naam')
+    search_fields = ('verzekeraar_naam', 'regio_naam')
+
+    def get_verzekeringen_count(self, obj):
+        count = obj.verzekeringen.count()
         if count == 0:
-            return '0 products'
-        return f'{count} products'
-    get_products_count.short_description = 'Products'
+            return '0 verzekeringen'
+        return f'{count} verzekeringen'
+    get_verzekeringen_count.short_description = 'Verzekeringen'
 
-    def get_regions_count(self, obj):
-        count = obj.regions.count()
+    def get_landen_count(self, obj):
+        count = obj.regio_landen.count()
         if count == 0:
-            return '0 regions'
-        return f'{count} regions'
-    get_regions_count.short_description = 'Regions'
+            return '0 landen'
+        return f'{count} landen'
+    get_landen_count.short_description = 'Landen'
 
 
-@admin.register(ProviderRegions)
-class ProviderRegionsAdmin(admin.ModelAdmin):
-    list_display = ('provider_region_id', 'provider_id', 'region_name', 'get_countries_count')
-    list_filter = ('provider_id',)
-    search_fields = ('region_name',)
-
-    def get_countries_count(self, obj):
-        count = obj.region_countries.count()
-        return f'{count} countries'
-    get_countries_count.short_description = 'Countries'
+@admin.register(VerzekeringRegioLanden)
+class VerzekeringRegioLandenAdmin(admin.ModelAdmin):
+    list_display = ('verzekering_regio', 'land_code')
+    list_filter = ('verzekering_regio__verzekeraar_naam',)
+    search_fields = ('land_code__land_naam', 'verzekering_regio__verzekeraar_naam', 'verzekering_regio__regio_naam')
 
 
-@admin.register(ProviderRegionCountries)
-class ProviderRegionCountriesAdmin(admin.ModelAdmin):
-    list_display = ('provider_region_id', 'country_code')
-    list_filter = ('provider_region_id__provider_id',)
-    search_fields = ('country_code__country_name',)
-
-
-# --- Product Admin with Inlines ---
-class ProductModulesInline(admin.TabularInline):
-    model = ProductModules
+# --- Verzekering Admin with Inlines ---
+class VerzekeringModulesInline(admin.TabularInline):
+    model = VerzekeringModules
     extra = 0
-    fields = ('provider_specific_name', 'is_mandatory')
+    fields = ('verzekeraar_specifieke_naam', 'is_verplicht')
     show_change_link = True
 
 
-class ProductTargetAudiencesInline(admin.TabularInline):
-    model = ProductTargetAudiences
+class VerzekeringDoelGroepenInline(admin.TabularInline):
+    model = VerzekeringDoelGroepen
     extra = 1
-    verbose_name = 'Target Audience'
-    verbose_name_plural = 'Target Audiences'
+    verbose_name = 'Doelgroep'
+    verbose_name_plural = 'Doelgroepen'
 
 
-@admin.register(Products)
-class ProductsAdmin(admin.ModelAdmin):
+@admin.register(Verzekeringen)
+class VerzekeringenAdmin(admin.ModelAdmin):
     list_display = (
-        'product_id',
-        'name',
-        'provider_id',
-        'policy_type',
+        'verzekering_id',
+        'naam',
+        'verzekering_regio',
+        'polis_type',
         'get_modules_count',
-        'get_target_audiences_count',
-        'max_age_application',
-        'max_age_coverage'
+        'get_doelgroepen_count',
+        'max_leeftijd_aanvraag',
+        'max_leeftijd_dekking'
     )
-    list_filter = ('provider_id', 'policy_type')
-    search_fields = ('name', 'description')
-    inlines = [ProductTargetAudiencesInline, ProductModulesInline]
+    list_filter = ('verzekering_regio__verzekeraar_naam', 'polis_type')
+    search_fields = ('naam', 'omschrijving')
+    inlines = [VerzekeringDoelGroepenInline, VerzekeringModulesInline]
 
     def get_modules_count(self, obj):
-        count = obj.product_modules.count()
+        count = obj.verzekering_modules.count()
         if count == 0:
             return '0 modules'
         return f'{count} modules'
     get_modules_count.short_description = 'Modules'
 
-    def get_target_audiences_count(self, obj):
-        count = obj.target_audience_mappings.count()
+    def get_doelgroepen_count(self, obj):
+        count = obj.doelgroep_koppelingen.count()
         if count == 0:
-            return 'None'
+            return 'Geen'
         return f'{count}'
-    get_target_audiences_count.short_description = 'Target Audiences'
+    get_doelgroepen_count.short_description = 'Doelgroepen'
 
 
-@admin.register(ProductModules)
-class ProductModulesAdmin(admin.ModelAdmin):
+@admin.register(VerzekeringModules)
+class VerzekeringModulesAdmin(admin.ModelAdmin):
     list_display = (
-        'product_module_id',
-        'product_id',
-        'provider_specific_name',
-        'is_mandatory'
+        'verzekering_module_id',
+        'verzekering',
+        'verzekeraar_specifieke_naam',
+        'is_verplicht'
     )
-    list_filter = ('product_id', 'is_mandatory')
-    search_fields = ('provider_specific_name',)
+    list_filter = ('verzekering', 'is_verplicht')
+    search_fields = ('verzekeraar_specifieke_naam',)
 
 
-@admin.register(ProductTargetAudiences)
-class ProductTargetAudiencesAdmin(admin.ModelAdmin):
-    list_display = ('product_id', 'audience_id')
-    list_filter = ('product_id', 'audience_id')
-    search_fields = ('product_id__name', 'audience_id__audience_name')
+@admin.register(VerzekeringDoelGroepen)
+class VerzekeringDoelGroepenAdmin(admin.ModelAdmin):
+    list_display = ('verzekering', 'doelgroep')
+    list_filter = ('verzekering', 'doelgroep')
+    search_fields = ('verzekering__naam', 'doelgroep__doelgroep_naam')
 
 
 # --- Business Rules Admin ---
-@admin.register(BusinessRules)
-class BusinessRulesAdmin(admin.ModelAdmin):
-    list_display = ('rule_id', 'scope_entity', 'scope_id', 'rule_type')
-    list_filter = ('scope_entity', 'rule_type')
-    search_fields = ('message',)
+@admin.register(BedrijfsRegels)
+class BedrijfsRegelsAdmin(admin.ModelAdmin):
+    list_display = ('regel_id', 'bereik_entiteit', 'bereik_id', 'regel_type')
+    list_filter = ('bereik_entiteit', 'regel_type')
+    search_fields = ('bericht',)

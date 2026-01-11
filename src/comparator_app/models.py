@@ -3,16 +3,16 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 
 
-class Countries(models.Model):
-    country_code = models.CharField(max_length=3, primary_key=True)
-    country_name = models.CharField(max_length=255)
+class Landen(models.Model):
+    land_code = models.CharField(max_length=3, primary_key=True)
+    land_naam = models.CharField(max_length=255)
 
     class Meta:
-        db_table = 'countries'
-        verbose_name_plural = 'Countries'
+        db_table = 'landen'
+        verbose_name_plural = 'Landen'
 
     def __str__(self):
-        return f"{self.country_name} ({self.country_code})"
+        return f"{self.land_naam} ({self.land_code})"
 
 
 class Relaties(models.Model):
@@ -263,143 +263,132 @@ class Contracten(models.Model):
         return f"Contract {self.polisnummer} - {self.relatie}"
 
 
-class Providers(models.Model):
-    STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
-        ('suspended', 'Suspended'),
+class VerzekeringRegio(models.Model):
+    STATUS_KEUZES = [
+        ('actief', 'Actief'),
+        ('inactief', 'Inactief'),
+        ('opgeschort', 'Opgeschort'),
     ]
 
-    provider_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=255)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    verzekering_regio_id = models.AutoField(primary_key=True)
+    verzekeraar_naam = models.CharField(max_length=255)  # Naam van de verzekeraar (bv. "Goudse", "ISIS")
+    regio_naam = models.CharField(max_length=255)  # Naam van de regio (bv. "Europa", "Wereldwijd")
+    status = models.CharField(max_length=20, choices=STATUS_KEUZES, default='actief')
 
     class Meta:
-        db_table = 'providers'
-        verbose_name_plural = 'Providers'
+        db_table = 'verzekering_regio'
+        verbose_name_plural = 'Verzekering Regios'
+        unique_together = ('verzekeraar_naam', 'regio_naam')
 
     def __str__(self):
-        return self.name
+        return f"{self.verzekeraar_naam} - {self.regio_naam}"
 
 
-class ProviderRegions(models.Model):
-    provider_region_id = models.AutoField(primary_key=True)
-    provider_id = models.ForeignKey(Providers, on_delete=models.CASCADE, related_name='regions')
-    region_name = models.CharField(max_length=255)
+class VerzekeringRegioLanden(models.Model):
+    verzekering_regio = models.ForeignKey(VerzekeringRegio, on_delete=models.CASCADE, related_name='regio_landen')
+    land_code = models.ForeignKey(Landen, on_delete=models.CASCADE, related_name='verzekering_regios')
 
     class Meta:
-        db_table = 'provider_regions'
-        verbose_name_plural = 'Provider Regions'
+        db_table = 'verzekering_regio_landen'
+        unique_together = ('verzekering_regio', 'land_code')
+        verbose_name_plural = 'Verzekering Regio Landen'
+
+
+class DoelGroepen(models.Model):
+    doelgroep_id = models.AutoField(primary_key=True)
+    doelgroep_naam = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'doelgroepen'
+        verbose_name_plural = 'Doelgroepen'
 
     def __str__(self):
-        return f"{self.provider_id.name} - {self.region_name}"
+        return self.doelgroep_naam
 
 
-class ProviderRegionCountries(models.Model):
-    provider_region_id = models.ForeignKey(ProviderRegions, on_delete=models.CASCADE, related_name='region_countries')
-    country_code = models.ForeignKey(Countries, on_delete=models.CASCADE, related_name='provider_regions')
-
-    class Meta:
-        db_table = 'provider_region_countries'
-        unique_together = ('provider_region_id', 'country_code')
-        verbose_name_plural = 'Provider Region Countries'
-
-
-class TargetAudiences(models.Model):
-    audience_id = models.AutoField(primary_key=True)
-    audience_name = models.CharField(max_length=255)
-
-    class Meta:
-        db_table = 'target_audiences'
-        verbose_name_plural = 'Target Audiences'
-
-    def __str__(self):
-        return self.audience_name
-
-
-class Products(models.Model):
-    POLICY_TYPE_CHOICES = [
-        ('flexible', 'Flexible'),
-        ('individual', 'Individual'),
-        ('family', 'Family'),
-        ('group', 'Group'),
-        ('corporate', 'Corporate'),
+class Verzekeringen(models.Model):
+    POLIS_TYPE_KEUZES = [
+        ('flexibel', 'Flexibel'),
+        ('individueel', 'Individueel'),
+        ('gezin', 'Gezin'),
+        ('groep', 'Groep'),
+        ('zakelijk', 'Zakelijk'),
     ]
 
-    product_id = models.AutoField(primary_key=True)
-    provider_id = models.ForeignKey(Providers, on_delete=models.CASCADE, related_name='products')
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    policy_type = models.CharField(max_length=20, choices=POLICY_TYPE_CHOICES)
-    max_age_application = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
-    max_age_coverage = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
-    target_audiences = models.ManyToManyField(
-        TargetAudiences,
-        through='ProductTargetAudiences',
-        related_name='products'
+    verzekering_id = models.AutoField(primary_key=True)
+    verzekering_regio = models.ForeignKey(VerzekeringRegio, on_delete=models.CASCADE, related_name='verzekeringen')
+    naam = models.CharField(max_length=255)
+    omschrijving = models.TextField(blank=True)
+    polis_type = models.CharField(max_length=20, choices=POLIS_TYPE_KEUZES)
+    max_leeftijd_aanvraag = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
+    max_leeftijd_dekking = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(120)])
+    doelgroepen = models.ManyToManyField(
+        DoelGroepen,
+        through='VerzekeringDoelGroepen',
+        related_name='verzekeringen'
     )
 
     class Meta:
-        db_table = 'products'
-        verbose_name_plural = 'Products'
+        db_table = 'verzekeringen'
+        verbose_name_plural = 'Verzekeringen'
 
     def __str__(self):
-        return f"{self.provider_id.name} - {self.name}"
+        return f"{self.verzekering_regio.verzekeraar_naam} - {self.naam}"
 
 
-class ProductTargetAudiences(models.Model):
-    product_id = models.ForeignKey(Products, on_delete=models.CASCADE, related_name='target_audience_mappings')
-    audience_id = models.ForeignKey(TargetAudiences, on_delete=models.CASCADE, related_name='product_target_mappings')
-
-    class Meta:
-        db_table = 'product_target_audiences'
-        unique_together = ('product_id', 'audience_id')
-        verbose_name_plural = 'Product Target Audiences'
-
-
-class ProductModules(models.Model):
-    product_module_id = models.AutoField(primary_key=True)
-    product_id = models.ForeignKey(Products, on_delete=models.CASCADE, related_name='product_modules')
-    is_mandatory = models.BooleanField(default=False)
-    provider_specific_name = models.CharField(max_length=255, blank=True)
+class VerzekeringDoelGroepen(models.Model):
+    verzekering = models.ForeignKey(Verzekeringen, on_delete=models.CASCADE, related_name='doelgroep_koppelingen')
+    doelgroep = models.ForeignKey(DoelGroepen, on_delete=models.CASCADE, related_name='verzekering_koppelingen')
 
     class Meta:
-        db_table = 'product_modules'
-        verbose_name_plural = 'Product Modules'
+        db_table = 'verzekering_doelgroepen'
+        unique_together = ('verzekering', 'doelgroep')
+        verbose_name_plural = 'Verzekering Doelgroepen'
+
+
+class VerzekeringModules(models.Model):
+    verzekering_module_id = models.AutoField(primary_key=True)
+    verzekering = models.ForeignKey(Verzekeringen, on_delete=models.CASCADE, related_name='verzekering_modules')
+    is_verplicht = models.BooleanField(default=False)
+    verzekeraar_specifieke_naam = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = 'verzekering_modules'
+        verbose_name_plural = 'Verzekering Modules'
 
     def __str__(self):
-        product_name = self.product_id.name
-        module_display = self.provider_specific_name or f"Module ID: {self.product_module_id}"
-        return f"{product_name} - {module_display}"
+        verzekering_naam = self.verzekering.naam
+        module_weergave = self.verzekeraar_specifieke_naam or f"Module ID: {self.verzekering_module_id}"
+        return f"{verzekering_naam} - {module_weergave}"
 
 
-class BusinessRules(models.Model):
-    SCOPE_ENTITY_CHOICES = [
-        ('provider', 'Provider'),
-        ('product', 'Product'),
+class BedrijfsRegels(models.Model):
+    BEREIK_ENTITEIT_KEUZES = [
+        ('verzekeraar', 'Verzekeraar'),
+        ('verzekering', 'Verzekering'),
         ('module', 'Module'),
-        ('coverage', 'Coverage'),
+        ('dekking', 'Dekking'),
         ('parameter', 'Parameter'),
     ]
 
-    RULE_TYPE_CHOICES = [
-        ('eligibility', 'Eligibility Rule'),
-        ('validation', 'Validation Rule'),
-        ('calculation', 'Calculation Rule'),
-        ('exclusion', 'Exclusion Rule'),
-        ('dependency', 'Dependency Rule'),
+    REGEL_TYPE_KEUZES = [
+        ('geschiktheid', 'Geschiktheidsregel'),
+        ('validatie', 'Validatieregel'),
+        ('berekening', 'Berekenregel'),
+        ('uitsluiting', 'Uitsluitingsregel'),
+        ('afhankelijkheid', 'Afhankelijkheidsregel'),
     ]
 
-    rule_id = models.AutoField(primary_key=True)
-    scope_entity = models.CharField(max_length=20, choices=SCOPE_ENTITY_CHOICES)
-    scope_id = models.IntegerField()
-    rule_type = models.CharField(max_length=20, choices=RULE_TYPE_CHOICES)
-    condition_json = models.JSONField()
-    message = models.TextField()
+    regel_id = models.AutoField(primary_key=True)
+    bereik_entiteit = models.CharField(max_length=20, choices=BEREIK_ENTITEIT_KEUZES)
+    bereik_id = models.IntegerField()
+    regel_type = models.CharField(max_length=20, choices=REGEL_TYPE_KEUZES)
+    conditie_json = models.JSONField()
+    bericht = models.TextField()
 
     class Meta:
-        db_table = 'business_rules'
-        verbose_name_plural = 'Business Rules'
+        db_table = 'bedrijfsregels'
+        verbose_name_plural = 'Bedrijfsregels'
 
     def __str__(self):
-        return f"{self.scope_entity}:{self.scope_id} - {self.rule_type}"
+        return f"{self.bereik_entiteit}:{self.bereik_id} - {self.regel_type}"

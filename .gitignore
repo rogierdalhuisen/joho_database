@@ -45,3 +45,4 @@ local_settings.py
 src/comparator_app/notebook.ipynb
 
 *.md
+!README.md
