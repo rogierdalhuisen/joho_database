@@ -293,6 +293,9 @@ class VerzekeringRegioLanden(models.Model):
         unique_together = ('verzekering_regio', 'land_code')
         verbose_name_plural = 'Verzekering Regio Landen'
 
+    def __str__(self):
+        return f"{self.verzekering_regio} - {self.land_code.land_naam}"
+
 
 class DoelGroepen(models.Model):
     doelgroep_id = models.AutoField(primary_key=True)
