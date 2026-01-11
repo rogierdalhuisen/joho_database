@@ -22,11 +22,18 @@ class Command(BaseCommand):
             help='Maximaal aantal results om te verwerken (voor testen)'
         )
 
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='Preview changes without committing to database (DRY RUN mode)'
+        )
+
     def handle(self, *args, **options):
         """Voer de synchronisatie uit."""
 
         form_id = options['form_id']
         max_results = options['max_results']
+        dry_run = options['dry_run']
 
         # Header
         self.stdout.write(self.style.SUCCESS("=" * 60))
@@ -41,7 +48,17 @@ class Command(BaseCommand):
             self.stdout.write(f"  - Max results: {max_results} (TEST MODE)")
         else:
             self.stdout.write(f"  - Max results: Alle (PRODUCTIE)")
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING(f"  - DRY RUN: Enabled (geen wijzigingen worden opgeslagen)"))
+        else:
+            self.stdout.write(f"  - DRY RUN: Disabled (wijzigingen worden opgeslagen)")
         self.stdout.write("")
+
+        # Dry run warning
+        if dry_run:
+            self.stdout.write(self.style.WARNING("⚠ DRY RUN MODE: Geen data wordt opgeslagen in de database"))
+            self.stdout.write("")
 
         # Sync
         self.stdout.write(self.style.WARNING(">>> SYNCHRONISEREN ADVIESAANVRAGEN"))
@@ -50,11 +67,16 @@ class Command(BaseCommand):
         try:
             success, errors, skipped = sync_egrip_formulieren(
                 form_id=form_id,
-                max_results=max_results
+                max_results=max_results,
+                dry_run=dry_run
             )
 
             self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS(f"✓ E-grip sync voltooid!"))
+            if dry_run:
+                self.stdout.write(self.style.SUCCESS(f"✓ E-grip DRY RUN voltooid!"))
+            else:
+                self.stdout.write(self.style.SUCCESS(f"✓ E-grip sync voltooid!"))
+
             self.stdout.write(f"  - Succesvol: {success}")
             self.stdout.write(f"  - Geskipt (duplicaten): {skipped}")
             self.stdout.write(f"  - Fouten: {errors}")
@@ -62,6 +84,10 @@ class Command(BaseCommand):
 
             if errors > 0:
                 self.stdout.write(self.style.WARNING(f"⚠ Let op: {errors} fouten tijdens sync. Check de logs."))
+                self.stdout.write("")
+
+            if dry_run:
+                self.stdout.write(self.style.NOTICE("ℹ Dit was een DRY RUN. Voer het commando zonder --dry-run uit om wijzigingen op te slaan."))
                 self.stdout.write("")
 
         except Exception as e:

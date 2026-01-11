@@ -5,8 +5,20 @@ from datetime import datetime, date
 import pytz
 from django.db import transaction
 from django.conf import settings
+from pydantic import ValidationError
 
 from .models import Relaties, Personen, Contracten, AdviesAanvragen
+from .schemas_assuportal import (
+    AssuportalRelatiesAPIResponse,
+    AssuportalRelatieDetailAPIResponse,
+    AssuportalContractenAPIResponse,
+    AssuportalRelatieListItem,
+    AssuportalRelatieDetail,
+    AssuportalContract,
+    RelatieInput,
+    PersoonInput,
+    ContractInput,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,23 +81,23 @@ def convert_invalid_datetime(datetime_string: Optional[str]) -> Optional[datetim
 # API FETCH FUNCTIONS
 # ============================================================================
 
-def fetch_relaties_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
+def fetch_relaties_list(page: int = 1, size: int = 50) -> Optional[AssuportalRelatiesAPIResponse]:
     """
-    Haal een pagina met relaties op van de Assuportal API (LIST endpoint).
+    Haal een pagina met relaties op van de Assuportal API (LIST endpoint) met validatie.
 
     Args:
         page: Paginanummer (start bij 1)
         size: Aantal records per pagina
 
     Returns:
-        JSON response van de API of lege dict bij fout
+        Validated AssuportalRelatiesAPIResponse of None bij fout
     """
     api_url = get_env('ASSUPORTAL_RELATIES')
     api_token = get_env('ASSUPORTAL_API_TOKEN')
 
     if not api_url or not api_token:
         logger.critical("ASSUPORTAL_RELATIES of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
-        return {}
+        return None
 
     headers = {
         'Authorization': f'Bearer {api_token}',
@@ -101,28 +113,39 @@ def fetch_relaties_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
         logger.info(f"Fetching relaties: pagina {page}, size {size}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
-        return response.json()
+        raw_data = response.json()
+
+        # Validate with Pydantic
+        try:
+            validated_data = AssuportalRelatiesAPIResponse(**raw_data)
+            logger.info(f"✓ Relaties API success: {len(validated_data.data)} items gevalideerd")
+            return validated_data
+        except ValidationError as e:
+            logger.error(f"Relaties API response validation failed: {e}")
+            logger.error(f"Raw response (first 500 chars): {str(raw_data)[:500]}")
+            return None
+
     except requests.exceptions.RequestException as e:
         logger.error(f"API-call naar Relaties mislukt (pagina {page}): {e}")
-        return {}
+        return None
 
 
-def fetch_relatie_detail(relatie_id: int) -> Dict[str, Any]:
+def fetch_relatie_detail(relatie_id: int) -> Optional[AssuportalRelatieDetailAPIResponse]:
     """
-    Haal volledige details van één relatie op (DETAIL endpoint).
+    Haal volledige details van één relatie op (DETAIL endpoint) met validatie.
 
     Args:
         relatie_id: Het ID van de relatie
 
     Returns:
-        JSON response van de API of lege dict bij fout
+        Validated AssuportalRelatieDetailAPIResponse of None bij fout
     """
     api_url = get_env('ASSUPORTAL_RELATIES')
     api_token = get_env('ASSUPORTAL_API_TOKEN')
 
     if not api_url or not api_token:
         logger.critical("ASSUPORTAL_RELATIES of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
-        return {}
+        return None
 
     headers = {
         'Authorization': f'Bearer {api_token}',
@@ -134,29 +157,38 @@ def fetch_relatie_detail(relatie_id: int) -> Dict[str, Any]:
     try:
         response = requests.get(detail_url, headers=headers, timeout=30)
         response.raise_for_status()
-        return response.json()
+        raw_data = response.json()
+
+        # Validate with Pydantic
+        try:
+            validated_data = AssuportalRelatieDetailAPIResponse(**raw_data)
+            return validated_data
+        except ValidationError as e:
+            logger.error(f"Relatie detail API validation failed for {relatie_id}: {e}")
+            return None
+
     except requests.exceptions.RequestException as e:
         logger.error(f"API-call naar Relatie detail {relatie_id} mislukt: {e}")
-        return {}
+        return None
 
 
-def fetch_contracten_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
+def fetch_contracten_list(page: int = 1, size: int = 50) -> Optional[AssuportalContractenAPIResponse]:
     """
-    Haal een pagina met contracten op van de Assuportal API (LIST endpoint).
+    Haal een pagina met contracten op van de Assuportal API (LIST endpoint) met validatie.
 
     Args:
         page: Paginanummer (start bij 1)
         size: Aantal records per pagina
 
     Returns:
-        JSON response van de API of lege dict bij fout
+        Validated AssuportalContractenAPIResponse of None bij fout
     """
     api_url = get_env('ASSUPORTAL_CONTRACTEN')
     api_token = get_env('ASSUPORTAL_API_TOKEN')
 
     if not api_url or not api_token:
         logger.critical("ASSUPORTAL_CONTRACTEN of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
-        return {}
+        return None
 
     headers = {
         'Authorization': f'Bearer {api_token}',
@@ -172,126 +204,165 @@ def fetch_contracten_list(page: int = 1, size: int = 50) -> Dict[str, Any]:
         logger.info(f"Fetching contracten: pagina {page}, size {size}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
-        return response.json()
+        raw_data = response.json()
+
+        # Validate with Pydantic
+        try:
+            validated_data = AssuportalContractenAPIResponse(**raw_data)
+            logger.info(f"✓ Contracten API success: {len(validated_data.data)} items gevalideerd")
+            return validated_data
+        except ValidationError as e:
+            logger.error(f"Contracten API response validation failed: {e}")
+            logger.error(f"Raw response (first 500 chars): {str(raw_data)[:500]}")
+            return None
+
     except requests.exceptions.RequestException as e:
         logger.error(f"API-call naar Contracten mislukt (pagina {page}): {e}")
-        return {}
+        return None
 
 
-def fetch_contract_detail(contract_id: int) -> Dict[str, Any]:
+# ============================================================================
+# TRANSFORMATION FUNCTIONS
+# ============================================================================
+
+def transform_relatie_list_item_to_input(
+    api_relatie: AssuportalRelatieListItem
+) -> Optional[RelatieInput]:
     """
-    Haal volledige details van één contract op (DETAIL endpoint).
+    Transformeer een gevalideerd relatie list item naar RelatieInput.
 
     Args:
-        contract_id: Het ID van het contract
+        api_relatie: Validated AssuportalRelatieListItem
 
     Returns:
-        JSON response van de API of lege dict bij fout
+        Validated RelatieInput of None bij fout
     """
-    api_url = get_env('ASSUPORTAL_CONTRACTEN')
-    api_token = get_env('ASSUPORTAL_API_TOKEN')
-
-    if not api_url or not api_token:
-        logger.critical("ASSUPORTAL_CONTRACTEN of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
-        return {}
-
-    headers = {
-        'Authorization': f'Bearer {api_token}',
-        'Content-Type': 'application/json'
-    }
-
-    detail_url = f"{api_url}/{contract_id}"
-
     try:
-        response = requests.get(detail_url, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"API-call naar Contract detail {contract_id} mislukt: {e}")
-        return {}
+        email_adressen = [api_relatie.standaard_email] if api_relatie.standaard_email else []
+
+        input_data = {
+            'relatie_id': api_relatie.id,
+            'hoofdnaam': api_relatie.naam,
+            'ts_aangemaakt': convert_invalid_datetime(api_relatie.ts_aangemaakt),
+            'email_adressen': email_adressen,
+            'source': 'api'
+        }
+
+        return RelatieInput(**input_data)
+    except ValidationError as e:
+        logger.error(f"Relatie {api_relatie.id} transform validation failed: {e}")
+        return None
 
 
-# ============================================================================
-# DATA EXTRACTION FUNCTIONS
-# ============================================================================
-
-def extract_email_list(api_data: Dict[str, Any]) -> List[str]:
+def transform_relatie_detail_to_input(
+    api_relatie: AssuportalRelatieDetail
+) -> Optional[RelatieInput]:
     """
-    Extraheer alle email adressen uit de detail API response.
+    Transformeer een gevalideerd relatie detail naar RelatieInput.
 
     Args:
-        api_data: De 'data' dict van de detail API response
+        api_relatie: Validated AssuportalRelatieDetail
 
     Returns:
-        List van email adressen (strings)
+        Validated RelatieInput of None bij fout
     """
-    emails = []
+    try:
+        # Extract all email addresses
+        email_adressen = [email.email for email in api_relatie.email_adressen]
 
-    # Email uit email_adressen array
-    email_adressen = api_data.get('email_adressen', [])
-    for email_obj in email_adressen:
-        if email_obj.get('email'):
-            emails.append(email_obj['email'])
+        input_data = {
+            'relatie_id': api_relatie.id,
+            'hoofdnaam': api_relatie.naam,
+            'ts_aangemaakt': convert_invalid_datetime(api_relatie.ts_aangemaakt),
+            'email_adressen': email_adressen,
+            'source': 'api'
+        }
 
-    # Fallback: standaard_email uit LIST response
-    if not emails and api_data.get('standaard_email'):
-        emails.append(api_data['standaard_email'])
+        return RelatieInput(**input_data)
+    except ValidationError as e:
+        logger.error(f"Relatie {api_relatie.id} detail transform validation failed: {e}")
+        return None
 
-    return emails
+
+def transform_contract_to_input(api_contract: AssuportalContract) -> Optional[ContractInput]:
+    """
+    Transformeer een gevalideerd contract naar ContractInput.
+
+    Args:
+        api_contract: Validated AssuportalContract
+
+    Returns:
+        Validated ContractInput of None bij fout
+    """
+    try:
+        input_data = {
+            'contract_id': api_contract.id,
+            'relatie_id': api_contract.relatie_id,
+            'polisnummer': api_contract.polisnummer,
+            'branche': api_contract.branche,
+            'datum_ingang': convert_invalid_date(api_contract.datum_ingang),
+            'ts_aangemaakt': convert_invalid_datetime(api_contract.ts_aangemaakt),
+            'ts_gewijzigd': convert_invalid_datetime(api_contract.ts_gewijzigd),
+        }
+
+        return ContractInput(**input_data)
+    except ValidationError as e:
+        logger.error(f"Contract {api_contract.id} transform validation failed: {e}")
+        return None
 
 
 # ============================================================================
 # SAVE FUNCTIONS
 # ============================================================================
 
-def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) -> Optional[Relaties]:
+def save_relatie_from_input(
+    relatie_input: RelatieInput,
+    personen_data: Optional[List[PersoonInput]] = None,
+    email_lookup: Optional[Dict[int, str]] = None,
+    dry_run: bool = False
+) -> Optional[Relaties]:
     """
-    Sla een Relatie op vanuit API data (LIST of DETAIL).
+    Sla een Relatie op vanuit gevalideerde input met MERGE strategie.
 
     MERGE STRATEGIE: Als een relatie met dit email al bestaat vanuit een AdviesAanvraag
     (relatie_id=None, source='adviesaanvraag'), dan wordt deze relatie ge-upgrade met
     de API data in plaats van een nieuwe aan te maken.
 
     Args:
-        api_data: De 'data' dict van de API response
-        use_detail: True als api_data van DETAIL endpoint komt (heeft personen, adressen, etc)
+        relatie_input: Validated RelatieInput object
+        personen_data: Optional list of validated PersoonInput objects (for detail sync)
+        email_lookup: Optional mapping of persoon_id -> email
+        dry_run: If True, don't actually save to database
 
     Returns:
         Relaties object of None bij fout
     """
     try:
+        if dry_run:
+            logger.info(f"[DRY RUN] Would create/update relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam})")
+            # Return a mock object that counts as success in dry-run
+            from types import SimpleNamespace
+            return SimpleNamespace(relatie_id=relatie_input.relatie_id, hoofdnaam=relatie_input.hoofdnaam)
+
         with transaction.atomic():
-            # Basis velden (beschikbaar in LIST en DETAIL)
-            relatie_id = api_data.get('id')
-            hoofdnaam = api_data.get('naam')
-            ts_aangemaakt = convert_invalid_datetime(api_data.get('ts_aangemaakt'))
-
-            # Email adressen
-            if use_detail:
-                email_adressen = extract_email_list(api_data)
-            else:
-                # LIST response heeft alleen standaard_email
-                standaard_email = api_data.get('standaard_email')
-                email_adressen = [standaard_email] if standaard_email else []
-
-            # MERGE LOGICA: Check of er al een "orphaned" relatie bestaat
+            # MERGE LOGICA: Check of er al een relatie bestaat
             # Stap 1: Probeer te vinden op relatie_id
             try:
-                relatie = Relaties.objects.get(relatie_id=relatie_id)
+                relatie = Relaties.objects.get(relatie_id=relatie_input.relatie_id)
                 # Bestaande API relatie gevonden, update deze
-                relatie.hoofdnaam = hoofdnaam
-                relatie.ts_aangemaakt = ts_aangemaakt
-                relatie.email_adressen = email_adressen
+                relatie.hoofdnaam = relatie_input.hoofdnaam
+                relatie.ts_aangemaakt = relatie_input.ts_aangemaakt
+                relatie.email_adressen = relatie_input.email_adressen
                 relatie.source = 'api'
                 relatie.save()
                 action = "bijgewerkt (bestaande API relatie)"
-                logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+                logger.info(f"Relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam}): {action}")
 
             except Relaties.DoesNotExist:
                 # Stap 2: Geen API relatie gevonden, check voor orphaned relatie met dit email
                 orphaned_relatie = None
-                if email_adressen:
-                    for email in email_adressen:
+                if relatie_input.email_adressen:
+                    for email in relatie_input.email_adressen:
                         # Zoek relatie die:
                         # 1. Nog geen relatie_id heeft (None)
                         # 2. Van formulier komt (source='adviesaanvraag')
@@ -303,59 +374,45 @@ def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) ->
                         ).first()
 
                         if orphaned_relatie:
-                            logger.info(f"MERGE: Orphaned relatie {orphaned_relatie.pk} matched met API relatie {relatie_id} via email {email}")
+                            logger.info(f"MERGE: Orphaned relatie {orphaned_relatie.pk} matched met API relatie {relatie_input.relatie_id} via email {email}")
                             break
 
                 if orphaned_relatie:
                     # MERGE: Update de orphaned relatie met API data
-                    orphaned_relatie.relatie_id = relatie_id
-                    orphaned_relatie.hoofdnaam = hoofdnaam
-                    orphaned_relatie.ts_aangemaakt = ts_aangemaakt
-                    orphaned_relatie.email_adressen = email_adressen
+                    orphaned_relatie.relatie_id = relatie_input.relatie_id
+                    orphaned_relatie.hoofdnaam = relatie_input.hoofdnaam
+                    orphaned_relatie.ts_aangemaakt = relatie_input.ts_aangemaakt
+                    orphaned_relatie.email_adressen = relatie_input.email_adressen
                     orphaned_relatie.source = 'api'
                     orphaned_relatie.save()
                     relatie = orphaned_relatie
                     action = "ge-merged (formulier → API)"
-                    logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+                    logger.info(f"Relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam}): {action}")
                 else:
                     # Geen orphaned relatie gevonden, maak nieuwe aan
                     relatie = Relaties.objects.create(
-                        relatie_id=relatie_id,
-                        hoofdnaam=hoofdnaam,
-                        ts_aangemaakt=ts_aangemaakt,
-                        email_adressen=email_adressen,
+                        relatie_id=relatie_input.relatie_id,
+                        hoofdnaam=relatie_input.hoofdnaam,
+                        ts_aangemaakt=relatie_input.ts_aangemaakt,
+                        email_adressen=relatie_input.email_adressen,
                         source='api'
                     )
                     action = "aangemaakt (nieuwe API relatie)"
-                    logger.info(f"Relatie {relatie_id} ({hoofdnaam}): {action}")
+                    logger.info(f"Relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam}): {action}")
 
-            # Als DETAIL: sla ook Personen op
-            if use_detail:
-                personen_data = api_data.get('personen', [])
-                email_adressen_data = api_data.get('email_adressen', [])
-
-                # Build lookup: persoon_id -> email
-                email_lookup = {}
-                for email_obj in email_adressen_data:
-                    persoon_id = email_obj.get('persoon_id')
-                    email = email_obj.get('email')
-                    if persoon_id and email:
-                        # Store first email per person (in case of multiple)
-                        if persoon_id not in email_lookup:
-                            email_lookup[persoon_id] = email
-
+            # Als personen data beschikbaar: sla ook Personen op
+            if personen_data and email_lookup:
                 # Verwijder oude personen (voor re-sync)
                 relatie.personen.all().delete()
 
-                # Voeg nieuwe personen toe met correct email
-                for persoon in personen_data:
-                    api_persoon_id = persoon.get('id')
-                    persoon_email = email_lookup.get(api_persoon_id)  # Look up by person ID
+                # Voeg nieuwe personen toe
+                for persoon_input in personen_data:
+                    persoon_email = email_lookup.get(persoon_input.api_persoon_id)
 
                     Personen.objects.create(
                         relatie=relatie,
-                        api_persoon_id=api_persoon_id,
-                        persoon_naam=persoon.get('naam', ''),
+                        api_persoon_id=persoon_input.api_persoon_id,
+                        persoon_naam=persoon_input.persoon_naam,
                         persoon_email=persoon_email
                     )
 
@@ -364,57 +421,63 @@ def save_relatie_from_api(api_data: Dict[str, Any], use_detail: bool = False) ->
             return relatie
 
     except Exception as e:
-        logger.error(f"Fout bij opslaan Relatie {api_data.get('id')}: {e}")
+        logger.error(f"Fout bij opslaan Relatie {relatie_input.relatie_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
-def save_contract_from_api(api_data: Dict[str, Any]) -> Optional[Contracten]:
+def save_contract_from_input(
+    contract_input: ContractInput,
+    dry_run: bool = False
+) -> Optional[Contracten]:
     """
-    Sla een Contract op vanuit API data.
+    Sla een Contract op vanuit gevalideerde input.
 
     Args:
-        api_data: De 'data' dict van de API response (LIST of DETAIL)
+        contract_input: Validated ContractInput object
+        dry_run: If True, don't actually save to database
 
     Returns:
         Contracten object of None bij fout
     """
     try:
-        contract_id = api_data.get('id')
-        relatie_id = api_data.get('relatie_id')
-
         # Check of Relatie bestaat
         try:
-            relatie = Relaties.objects.get(relatie_id=relatie_id)
+            relatie = Relaties.objects.get(relatie_id=contract_input.relatie_id)
         except Relaties.DoesNotExist:
-            logger.warning(f"Contract {contract_id}: Relatie {relatie_id} niet gevonden, skip")
+            logger.warning(f"Contract {contract_input.contract_id}: Relatie {contract_input.relatie_id} niet gevonden, skip")
             return None
 
-        with transaction.atomic():
-            # Datum conversies
-            datum_ingang = convert_invalid_date(api_data.get('datum_ingang'))
-            ts_aangemaakt = convert_invalid_datetime(api_data.get('ts_aangemaakt'))
-            ts_gewijzigd = convert_invalid_datetime(api_data.get('ts_gewijzigd'))
+        if dry_run:
+            logger.info(f"[DRY RUN] Would create/update contract {contract_input.contract_id} ({contract_input.polisnummer})")
+            # Return a mock object that counts as success in dry-run
+            from types import SimpleNamespace
+            return SimpleNamespace(contract_id=contract_input.contract_id, polisnummer=contract_input.polisnummer)
 
+        with transaction.atomic():
             # Update or create Contract
             contract, created = Contracten.objects.update_or_create(
-                contract_id=contract_id,
+                contract_id=contract_input.contract_id,
                 defaults={
-                    'polisnummer': api_data.get('polisnummer', ''),
-                    'branche': api_data.get('branche'),
+                    'polisnummer': contract_input.polisnummer,
+                    'branche': contract_input.branche,
                     'relatie': relatie,
-                    'datum_ingang': datum_ingang,
-                    'ts_aangemaakt': ts_aangemaakt,
-                    'ts_gewijzigd': ts_gewijzigd
+                    'datum_ingang': contract_input.datum_ingang,
+                    'ts_aangemaakt': contract_input.ts_aangemaakt,
+                    'ts_gewijzigd': contract_input.ts_gewijzigd
                 }
             )
 
             action = "aangemaakt" if created else "bijgewerkt"
-            logger.info(f"Contract {contract_id} ({api_data.get('polisnummer')}): {action}")
+            logger.info(f"Contract {contract_input.contract_id} ({contract_input.polisnummer}): {action}")
 
             return contract
 
     except Exception as e:
-        logger.error(f"Fout bij opslaan Contract {api_data.get('id')}: {e}")
+        logger.error(f"Fout bij opslaan Contract {contract_input.contract_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
@@ -469,143 +532,233 @@ def find_or_create_relatie_by_email(email: str) -> Relaties:
 # MAIN SYNC FUNCTIONS
 # ============================================================================
 
-def sync_relaties(page_size: int = 50, use_detail: bool = False, max_pages: Optional[int] = None) -> Tuple[int, int]:
+def sync_relaties(
+    page_size: int = 50,
+    use_detail: bool = False,
+    max_pages: Optional[int] = None,
+    dry_run: bool = False
+) -> Tuple[int, int]:
     """
-    Synchroniseer Relaties van Assuportal API naar database.
+    Synchroniseer Relaties van Assuportal API naar database met validatie.
 
     Args:
         page_size: Aantal records per pagina
         use_detail: True om DETAIL endpoint te gebruiken (langzaam maar volledig)
         max_pages: Maximaal aantal paginas (voor testen), None = alle
+        dry_run: If True, don't actually save to database
 
     Returns:
         Tuple van (success_count, error_count)
     """
-    logger.info("=== Start Relaties synchronisatie ===")
+    logger.info(f"=== Start Relaties synchronisatie {'(DRY RUN)' if dry_run else ''} ===")
 
     success_count = 0
     error_count = 0
     page = 1
 
-    while True:
-        # Stop als max_pages bereikt
-        if max_pages and page > max_pages:
-            logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
-            break
+    # Define the processing logic
+    def process_pages():
+        nonlocal success_count, error_count, page
 
-        # Haal lijst op
-        response = fetch_relaties_list(page=page, size=page_size)
+        while True:
+            # Stop als max_pages bereikt
+            if max_pages and page > max_pages:
+                logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
+                break
 
-        if not response or response.get('result') != 'ok':
-            logger.error(f"Geen geldige response voor pagina {page}")
-            break
+            # Haal lijst op met validatie
+            response = fetch_relaties_list(page=page, size=page_size)
 
-        data_list = response.get('data', [])
-        meta = response.get('meta', {})
+            if not response or response.result != 'ok':
+                logger.error(f"Geen geldige response voor pagina {page}")
+                break
 
-        if not data_list:
-            logger.info(f"Geen data op pagina {page}, stoppen")
-            break
+            data_list = response.data
+            meta = response.meta or {}
 
-        logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} relaties")
+            if not data_list:
+                logger.info(f"Geen data op pagina {page}, stoppen")
+                break
 
-        # Verwerk elke relatie
-        for relatie_data in data_list:
-            relatie_id = relatie_data.get('id')
+            logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} relaties")
 
-            # Als use_detail: haal volledige data op
-            if use_detail:
-                detail_response = fetch_relatie_detail(relatie_id)
-                if detail_response and detail_response.get('result') == 'ok':
-                    detail_data = detail_response.get('data', {})
-                    result = save_relatie_from_api(detail_data, use_detail=True)
+            # Verwerk elke relatie
+            for relatie_data in data_list:
+                relatie_id = relatie_data.id
+
+                # Als use_detail: haal volledige data op
+                if use_detail:
+                    detail_response = fetch_relatie_detail(relatie_id)
+                    if detail_response and detail_response.result == 'ok':
+                        # Transform detail to input
+                        relatie_input = transform_relatie_detail_to_input(detail_response.data)
+
+                        if relatie_input:
+                            # Prepare personen data
+                            personen_list = []
+                            email_lookup = {}
+
+                            # Build email lookup
+                            for email_obj in detail_response.data.email_adressen:
+                                if email_obj.persoon_id and email_obj.email:
+                                    email_lookup[email_obj.persoon_id] = email_obj.email
+
+                            # Transform personen
+                            for persoon in detail_response.data.personen:
+                                try:
+                                    persoon_input = PersoonInput(
+                                        api_persoon_id=persoon.id,
+                                        persoon_naam=persoon.naam,
+                                        persoon_email=email_lookup.get(persoon.id)
+                                    )
+                                    personen_list.append(persoon_input)
+                                except ValidationError as e:
+                                    logger.error(f"Persoon {persoon.id} validation failed: {e}")
+
+                            result = save_relatie_from_input(
+                                relatie_input,
+                                personen_data=personen_list,
+                                email_lookup=email_lookup,
+                                dry_run=dry_run
+                            )
+                        else:
+                            result = None
+                    else:
+                        logger.error(f"Kon detail niet ophalen voor Relatie {relatie_id}")
+                        result = None
                 else:
-                    logger.error(f"Kon detail niet ophalen voor Relatie {relatie_id}")
-                    result = None
-            else:
-                # Gebruik LIST data
-                result = save_relatie_from_api(relatie_data, use_detail=False)
+                    # Gebruik LIST data
+                    relatie_input = transform_relatie_list_item_to_input(relatie_data)
+                    if relatie_input:
+                        result = save_relatie_from_input(relatie_input, dry_run=dry_run)
+                    else:
+                        result = None
 
-            if result:
-                success_count += 1
-            else:
-                error_count += 1
+                if result:
+                    success_count += 1
+                else:
+                    error_count += 1
 
-        # Check of er een volgende pagina is
-        current_page = meta.get('current_page')
-        last_page = meta.get('last_page')
+            # Check of er een volgende pagina is
+            current_page = meta.get('current_page')
+            last_page = meta.get('last_page')
 
-        if current_page and last_page and current_page >= last_page:
-            logger.info("Laatste pagina bereikt")
-            break
+            if current_page and last_page and current_page >= last_page:
+                logger.info("Laatste pagina bereikt")
+                break
 
-        page += 1
+            page += 1
+
+    if dry_run:
+        # Don't use transaction for dry run
+        process_pages()
+    else:
+        # Wrap everything in a transaction - all or nothing
+        try:
+            with transaction.atomic():
+                process_pages()
+        except Exception as e:
+            logger.error(f"CRITICAL: Relaties sync transaction failed, rolling back: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return 0, 1
 
     logger.info(f"=== Relaties sync voltooid: {success_count} succesvol, {error_count} fouten ===")
     return success_count, error_count
 
 
-def sync_contracten(page_size: int = 50, max_pages: Optional[int] = None) -> Tuple[int, int, int]:
+def sync_contracten(
+    page_size: int = 50,
+    max_pages: Optional[int] = None,
+    dry_run: bool = False
+) -> Tuple[int, int, int]:
     """
-    Synchroniseer Contracten van Assuportal API naar database.
+    Synchroniseer Contracten van Assuportal API naar database met validatie.
 
     Args:
         page_size: Aantal records per pagina
         max_pages: Maximaal aantal paginas (voor testen), None = alle
+        dry_run: If True, don't actually save to database
 
     Returns:
         Tuple van (success_count, error_count, skipped_count)
     """
-    logger.info("=== Start Contracten synchronisatie ===")
+    logger.info(f"=== Start Contracten synchronisatie {'(DRY RUN)' if dry_run else ''} ===")
 
     success_count = 0
     error_count = 0
     skipped_count = 0
     page = 1
 
-    while True:
-        # Stop als max_pages bereikt
-        if max_pages and page > max_pages:
-            logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
-            break
+    # Define the processing logic
+    def process_pages():
+        nonlocal success_count, error_count, skipped_count, page
 
-        # Haal lijst op
-        response = fetch_contracten_list(page=page, size=page_size)
+        while True:
+            # Stop als max_pages bereikt
+            if max_pages and page > max_pages:
+                logger.info(f"Max pages ({max_pages}) bereikt, stoppen")
+                break
 
-        if not response or response.get('result') != 'ok':
-            logger.error(f"Geen geldige response voor pagina {page}")
-            break
+            # Haal lijst op met validatie
+            response = fetch_contracten_list(page=page, size=page_size)
 
-        data_list = response.get('data', [])
-        meta = response.get('meta', {})
+            if not response or response.result != 'ok':
+                logger.error(f"Geen geldige response voor pagina {page}")
+                break
 
-        if not data_list:
-            logger.info(f"Geen data op pagina {page}, stoppen")
-            break
+            data_list = response.data
+            meta = response.meta or {}
 
-        logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} contracten")
+            if not data_list:
+                logger.info(f"Geen data op pagina {page}, stoppen")
+                break
 
-        # Verwerk elk contract
-        for contract_data in data_list:
-            result = save_contract_from_api(contract_data)
+            logger.info(f"Pagina {page}/{meta.get('last_page', '?')}: {len(data_list)} contracten")
 
-            if result:
-                success_count += 1
-            elif result is None and contract_data.get('relatie_id'):
-                # None betekent Relatie niet gevonden (zie save_contract_from_api)
-                skipped_count += 1
-            else:
-                error_count += 1
+            # Verwerk elk contract
+            for contract_data in data_list:
+                # Transform to input
+                contract_input = transform_contract_to_input(contract_data)
 
-        # Check of er een volgende pagina is
-        current_page = meta.get('current_page')
-        last_page = meta.get('last_page')
+                if not contract_input:
+                    error_count += 1
+                    continue
 
-        if current_page and last_page and current_page >= last_page:
-            logger.info("Laatste pagina bereikt")
-            break
+                # Save contract
+                result = save_contract_from_input(contract_input, dry_run=dry_run)
 
-        page += 1
+                if result:
+                    success_count += 1
+                elif result is None and contract_data.relatie_id:
+                    # None betekent Relatie niet gevonden (zie save_contract_from_input)
+                    skipped_count += 1
+                else:
+                    error_count += 1
+
+            # Check of er een volgende pagina is
+            current_page = meta.get('current_page')
+            last_page = meta.get('last_page')
+
+            if current_page and last_page and current_page >= last_page:
+                logger.info("Laatste pagina bereikt")
+                break
+
+            page += 1
+
+    if dry_run:
+        # Don't use transaction for dry run
+        process_pages()
+    else:
+        # Wrap everything in a transaction - all or nothing
+        try:
+            with transaction.atomic():
+                process_pages()
+        except Exception as e:
+            logger.error(f"CRITICAL: Contracten sync transaction failed, rolling back: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return 0, 0, 0
 
     logger.info(f"=== Contracten sync voltooid: {success_count} succesvol, {error_count} fouten, {skipped_count} geskipt ===")
     return success_count, error_count, skipped_count

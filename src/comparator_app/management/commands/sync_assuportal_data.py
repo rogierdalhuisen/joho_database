@@ -48,6 +48,12 @@ class Command(BaseCommand):
             help='Maximaal aantal paginas om te verwerken (voor testen)'
         )
 
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='Preview changes without committing to database (DRY RUN mode)'
+        )
+
     def handle(self, *args, **options):
         """Voer de synchronisatie uit."""
 
@@ -58,6 +64,7 @@ class Command(BaseCommand):
         page_size = options['page_size']
         use_detail = options['use_detail']
         max_pages = options['max_pages']
+        dry_run = options['dry_run']
 
         # Header
         self.stdout.write(self.style.SUCCESS("=" * 60))
@@ -72,7 +79,17 @@ class Command(BaseCommand):
             self.stdout.write(f"  - Max paginas: {max_pages} (TEST MODE)")
         if use_detail:
             self.stdout.write(f"  - Detail mode: ENABLED (met personen)")
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING(f"  - DRY RUN: Enabled (geen wijzigingen worden opgeslagen)"))
+        else:
+            self.stdout.write(f"  - DRY RUN: Disabled (wijzigingen worden opgeslagen)")
         self.stdout.write("")
+
+        # Dry run warning
+        if dry_run:
+            self.stdout.write(self.style.WARNING("⚠ DRY RUN MODE: Geen data wordt opgeslagen in de database"))
+            self.stdout.write("")
 
         # Sync Relaties
         if sync_relaties_flag:
@@ -83,18 +100,29 @@ class Command(BaseCommand):
                 success, errors = sync_relaties(
                     page_size=page_size,
                     use_detail=use_detail,
-                    max_pages=max_pages
+                    max_pages=max_pages,
+                    dry_run=dry_run
                 )
 
                 self.stdout.write("")
-                self.stdout.write(self.style.SUCCESS(f"✓ Relaties sync voltooid!"))
+                if dry_run:
+                    self.stdout.write(self.style.SUCCESS(f"✓ Relaties DRY RUN voltooid!"))
+                else:
+                    self.stdout.write(self.style.SUCCESS(f"✓ Relaties sync voltooid!"))
+
                 self.stdout.write(f"  - Succesvol: {success}")
                 self.stdout.write(f"  - Fouten: {errors}")
                 self.stdout.write("")
 
+                if errors > 0:
+                    self.stdout.write(self.style.WARNING(f"⚠ Let op: {errors} fouten tijdens Relaties sync. Check de logs."))
+                    self.stdout.write("")
+
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"✗ FOUT bij Relaties sync: {e}"))
                 self.stdout.write("")
+                import traceback
+                self.stdout.write(traceback.format_exc())
                 return
 
         # Sync Contracten
@@ -105,20 +133,36 @@ class Command(BaseCommand):
             try:
                 success, errors, skipped = sync_contracten(
                     page_size=page_size,
-                    max_pages=max_pages
+                    max_pages=max_pages,
+                    dry_run=dry_run
                 )
 
                 self.stdout.write("")
-                self.stdout.write(self.style.SUCCESS(f"✓ Contracten sync voltooid!"))
+                if dry_run:
+                    self.stdout.write(self.style.SUCCESS(f"✓ Contracten DRY RUN voltooid!"))
+                else:
+                    self.stdout.write(self.style.SUCCESS(f"✓ Contracten sync voltooid!"))
+
                 self.stdout.write(f"  - Succesvol: {success}")
                 self.stdout.write(f"  - Fouten: {errors}")
                 self.stdout.write(f"  - Geskipt (geen relatie): {skipped}")
                 self.stdout.write("")
 
+                if errors > 0:
+                    self.stdout.write(self.style.WARNING(f"⚠ Let op: {errors} fouten tijdens Contracten sync. Check de logs."))
+                    self.stdout.write("")
+
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"✗ FOUT bij Contracten sync: {e}"))
                 self.stdout.write("")
+                import traceback
+                self.stdout.write(traceback.format_exc())
                 return
+
+        # Dry run reminder
+        if dry_run:
+            self.stdout.write(self.style.NOTICE("ℹ Dit was een DRY RUN. Voer het commando zonder --dry-run uit om wijzigingen op te slaan."))
+            self.stdout.write("")
 
         # Footer
         self.stdout.write(self.style.SUCCESS("=" * 60))

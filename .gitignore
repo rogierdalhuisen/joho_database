@@ -41,3 +41,7 @@ local_settings.py
 
 # Other tools
 .claude/
+
+src/comparator_app/notebook.ipynb
+
+*.md

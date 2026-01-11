@@ -1,12 +1,18 @@
 import requests
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, date
 from django.db import transaction
 from decouple import config
+from pydantic import ValidationError
 
 from .models import Relaties, AdviesAanvragen
 from .api_assuportal import find_or_create_relatie_by_email
+from .schemas_egrip import (
+    EgripAPIResponse,
+    EgripResult,
+    AdviesAanvraagInput,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,21 +171,21 @@ BOOLEAN_FIELDS = {
 # API FETCH FUNCTIONS
 # ============================================================================
 
-def fetch_egrip_form_data(form_id: str = '2') -> Dict[str, Any]:
+def fetch_egrip_form_data(form_id: str = '2') -> Optional[EgripAPIResponse]:
     """
-    Haal volledige form data op van E-grip API.
+    Haal volledige form data op van E-grip API met Pydantic validatie.
 
     Args:
         form_id: Het formulier ID (default '2')
 
     Returns:
-        Dict met 'formId', 'fields', 'results' of lege dict bij fout
+        Validated EgripAPIResponse of None bij fout
     """
     config_data = get_egrip_config()
 
     if not config_data['endpoint'] or not config_data['token']:
         logger.critical("EGRIP_ENDPOINT of EGRIP_BEARER_TOKEN niet geconfigureerd in .env")
-        return {}
+        return None
 
     headers = {
         'Authorization': f"Bearer {config_data['token']}",
@@ -197,37 +203,27 @@ def fetch_egrip_form_data(form_id: str = '2') -> Dict[str, Any]:
             timeout=30
         )
         response.raise_for_status()
-        data = response.json()
+        raw_data = response.json()
 
-        results_count = len(data.get('results', []))
-        logger.info(f"✓ E-grip API success: {results_count} results ontvangen")
-        return data
+        # Validate with Pydantic
+        try:
+            validated_data = EgripAPIResponse(**raw_data)
+            results_count = len(validated_data.results)
+            logger.info(f"✓ E-grip API success: {results_count} results ontvangen en gevalideerd")
+            return validated_data
+        except ValidationError as e:
+            logger.error(f"E-grip API response validation failed: {e}")
+            logger.error(f"Raw response (first 500 chars): {str(raw_data)[:500]}")
+            return None
 
     except requests.exceptions.RequestException as e:
         logger.error(f"E-grip API call failed: {e}")
-        return {}
+        return None
 
 
 # ============================================================================
 # DATA EXTRACTION & CONVERSION
 # ============================================================================
-
-def extract_field_value(result_fields: List[Dict], position: int) -> Optional[str]:
-    """
-    Haal waarde op voor een specifieke positie.
-
-    Args:
-        result_fields: De 'fields' array van een result
-        position: Het position nummer
-
-    Returns:
-        De value string of None
-    """
-    for field in result_fields:
-        if field.get('position') == position:
-            return field.get('value')
-    return None
-
 
 def parse_date_value(value: str) -> Optional[date]:
     """
@@ -286,8 +282,7 @@ def parse_datetime_iso(datetime_string: str) -> Optional[datetime]:
         return None
 
     try:
-        # Vervang +01:00 door +00:00 voor UTC (simpele conversie)
-        # Voor productie misschien python-dateutil gebruiken
+        # Handle various timezone formats
         dt_str = datetime_string.replace('+01:00', '+00:00').replace('+02:00', '+00:00')
         return datetime.fromisoformat(dt_str)
     except (ValueError, TypeError) as e:
@@ -295,99 +290,137 @@ def parse_datetime_iso(datetime_string: str) -> Optional[datetime]:
         return None
 
 
+def transform_egrip_result_to_input(result: EgripResult) -> Optional[AdviesAanvraagInput]:
+    """
+    Transformeer een gevalideerd EgripResult naar AdviesAanvraagInput.
+
+    Args:
+        result: Validated EgripResult object
+
+    Returns:
+        Validated AdviesAanvraagInput of None bij fout
+    """
+    try:
+        # Build answer lookup: position -> value
+        answers = {f.position: f.value for f in result.fields}
+
+        # Extract email (REQUIRED)
+        email = answers.get(100)
+        if not email:
+            logger.warning(f"Result {result.resultId}: Geen email (pos 100), skip")
+            return None
+
+        # Parse metadata
+        submitted_at = parse_datetime_iso(result.dateSubmitted)
+        if not submitted_at:
+            submitted_at = datetime.now()  # Fallback
+
+        # Build input data dictionary
+        input_data = {
+            'external_result_id': result.resultId,
+            'form_id': result.formId,
+            'email': email,
+            'ingediend_op': submitted_at,
+            'referral_source': result.referral.source if result.referral else None,
+            'referral_medium': result.referral.medium if result.referral else None,
+            'referral_campaign': result.referral.campaign if result.referral else None,
+            'raw_form_data': result.model_dump(),  # Backup
+        }
+
+        # Map alle positions naar velden
+        for position, field_name in POSITION_TO_FIELD_MAP.items():
+            value = answers.get(position)
+
+            # Skip lege waardes en "- Maak een keuze -"
+            if not value or value == '- Maak een keuze -':
+                continue
+
+            # Special handling voor datum velden
+            if field_name in DATE_FIELDS:
+                value = parse_date_value(value)
+
+            # Special handling voor boolean velden
+            elif field_name in BOOLEAN_FIELDS:
+                value = parse_boolean_value(value)
+
+            # Sla op (skip None waardes)
+            if value is not None:
+                input_data[field_name] = value
+
+        # Validate with Pydantic
+        try:
+            validated_input = AdviesAanvraagInput(**input_data)
+            return validated_input
+        except ValidationError as e:
+            logger.error(f"Result {result.resultId}: Validation failed: {e}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Result {result.resultId}: Transform failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
+
 # ============================================================================
 # SAVE FUNCTION
 # ============================================================================
 
-def save_aanvraag_from_egrip(result: Dict[str, Any]) -> Optional[AdviesAanvragen]:
+def save_aanvraag_from_input(
+    validated_input: AdviesAanvraagInput,
+    dry_run: bool = False
+) -> Optional[AdviesAanvragen]:
     """
-    Sla één AdviesAanvraag op vanuit E-grip result data.
+    Sla één AdviesAanvraag op vanuit gevalideerde input.
 
     Args:
-        result: Eén item uit de 'results' array
+        validated_input: Validated AdviesAanvraagInput object
+        dry_run: If True, don't actually save to database
 
     Returns:
         AdviesAanvragen object of None bij fout/skip
     """
     try:
-        result_id = result.get('resultId')
+        result_id = validated_input.external_result_id
 
         # Check duplicate
         if AdviesAanvragen.objects.filter(external_result_id=result_id).exists():
             logger.debug(f"Result {result_id} al geïmporteerd, skip")
             return None
 
+        if dry_run:
+            logger.info(f"[DRY RUN] Would create aanvraag {result_id} for {validated_input.email}")
+            # Return a mock object that counts as success in dry-run
+            from types import SimpleNamespace
+            return SimpleNamespace(external_result_id=result_id, email=validated_input.email)
+
         with transaction.atomic():
-            # Build answer lookup: position -> value
-            fields = result.get('fields', [])
-            answers = {f['position']: f['value'] for f in fields}
-
-            # Extract email (REQUIRED voor matching)
-            email = answers.get(100)
-            if not email:
-                logger.warning(f"Result {result_id}: Geen email (pos 100), skip")
-                return None
-
             # Find or create Relatie
-            relatie = find_or_create_relatie_by_email(email)
+            relatie = find_or_create_relatie_by_email(validated_input.email)
 
             # Update relatie stamgegevens als nog 'adviesaanvraag'
             if relatie.source == 'adviesaanvraag' and not relatie.hoofdnaam:
-                voornaam = answers.get(60, '')
-                achternaam = answers.get(70, '')
+                voornaam = validated_input.voorletters_roepnaam or ''
+                achternaam = validated_input.achternaam or ''
                 if voornaam or achternaam:
                     relatie.hoofdnaam = f"{voornaam} {achternaam}".strip()
                     relatie.save()
 
-            # Parse metadata
-            submitted_at = parse_datetime_iso(result.get('dateSubmitted'))
-            if not submitted_at:
-                submitted_at = datetime.now()  # Fallback
+            # Convert Pydantic model to dict, excluding None values
+            aanvraag_data = validated_input.model_dump(exclude_none=True)
 
-            referral = result.get('referral', {})
-
-            # Build aanvraag data dictionary
-            aanvraag_data = {
-                'relatie': relatie,
-                'external_result_id': result_id,
-                'form_id': result.get('formId', '2'),
-                'ingediend_op': submitted_at,
-                'referral_source': referral.get('source'),
-                'referral_medium': referral.get('medium'),
-                'referral_campaign': referral.get('campaign'),
-                'email': email,  # Direct veld
-                'raw_form_data': result,  # Backup
-            }
-
-            # Map alle positions naar velden
-            for position, field_name in POSITION_TO_FIELD_MAP.items():
-                value = answers.get(position)
-
-                # Skip lege waardes en "- Maak een keuze -"
-                if not value or value == '- Maak een keuze -':
-                    continue
-
-                # Special handling voor datum velden
-                if field_name in DATE_FIELDS:
-                    value = parse_date_value(value)
-
-                # Special handling voor boolean velden
-                elif field_name in BOOLEAN_FIELDS:
-                    value = parse_boolean_value(value)
-
-                # Sla op (skip None waardes)
-                if value is not None:
-                    aanvraag_data[field_name] = value
+            # Add relatie (not in Pydantic model)
+            aanvraag_data['relatie'] = relatie
 
             # Create aanvraag
             aanvraag = AdviesAanvragen.objects.create(**aanvraag_data)
 
             naam = f"{aanvraag.voorletters_roepnaam or ''} {aanvraag.achternaam or ''}".strip()
-            logger.info(f"✓ Aanvraag {result_id} opgeslagen: {naam} ({email})")
+            logger.info(f"✓ Aanvraag {result_id} opgeslagen: {naam} ({validated_input.email})")
             return aanvraag
 
     except Exception as e:
-        logger.error(f"✗ Fout bij opslaan aanvraag {result.get('resultId')}: {e}")
+        logger.error(f"✗ Fout bij opslaan aanvraag {validated_input.external_result_id}: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return None
@@ -397,27 +430,32 @@ def save_aanvraag_from_egrip(result: Dict[str, Any]) -> Optional[AdviesAanvragen
 # MAIN SYNC FUNCTION
 # ============================================================================
 
-def sync_egrip_formulieren(form_id: str = '2', max_results: Optional[int] = None) -> tuple:
+def sync_egrip_formulieren(
+    form_id: str = '2',
+    max_results: Optional[int] = None,
+    dry_run: bool = False
+) -> Tuple[int, int, int]:
     """
-    Synchroniseer E-grip formulier data naar database.
+    Synchroniseer E-grip formulier data naar database met volledige validatie.
 
     Args:
         form_id: Het formulier ID (default '2')
         max_results: Maximaal aantal results (voor testen), None = alle
+        dry_run: If True, don't actually save to database
 
     Returns:
         Tuple van (success_count, error_count, skipped_count)
     """
-    logger.info(f"=== Start E-grip sync voor form {form_id} ===")
+    logger.info(f"=== Start E-grip sync voor form {form_id} {'(DRY RUN)' if dry_run else ''} ===")
 
-    # Fetch data
-    data = fetch_egrip_form_data(form_id)
+    # Fetch and validate data
+    validated_response = fetch_egrip_form_data(form_id)
 
-    if not data:
-        logger.error("Geen data ontvangen van E-grip API")
+    if not validated_response:
+        logger.error("Geen geldige data ontvangen van E-grip API")
         return 0, 1, 0
 
-    results = data.get('results', [])
+    results = validated_response.results
 
     if not results:
         logger.warning("Geen results in API response")
@@ -426,24 +464,48 @@ def sync_egrip_formulieren(form_id: str = '2', max_results: Optional[int] = None
     # Limit voor testen
     if max_results:
         results = results[:max_results]
-        logger.info(f"TEST MODE: Verwerk alleen eerste {max_results} van {len(data.get('results', []))} results")
+        logger.info(f"TEST MODE: Verwerk alleen eerste {max_results} van {len(validated_response.results)} results")
 
     success_count = 0
     error_count = 0
     skipped_count = 0
 
-    for idx, result in enumerate(results, 1):
-        result_id = result.get('resultId', '?')
-        logger.debug(f"Verwerk result {idx}/{len(results)}: {result_id}")
+    # Wrap entire sync in transaction for atomicity (unless dry_run)
+    def process_results():
+        nonlocal success_count, error_count, skipped_count
 
-        aanvraag = save_aanvraag_from_egrip(result)
+        for idx, result in enumerate(results, 1):
+            result_id = result.resultId
+            logger.debug(f"Verwerk result {idx}/{len(results)}: {result_id}")
 
-        if aanvraag:
-            success_count += 1
-        elif aanvraag is None:
-            skipped_count += 1
-        else:
-            error_count += 1
+            # Transform to validated input
+            validated_input = transform_egrip_result_to_input(result)
+
+            if not validated_input:
+                error_count += 1
+                continue
+
+            # Save to database
+            aanvraag = save_aanvraag_from_input(validated_input, dry_run=dry_run)
+
+            if aanvraag:
+                success_count += 1
+            elif aanvraag is None:
+                skipped_count += 1
+
+    if dry_run:
+        # Don't use transaction for dry run
+        process_results()
+    else:
+        # Wrap everything in a transaction - all or nothing
+        try:
+            with transaction.atomic():
+                process_results()
+        except Exception as e:
+            logger.error(f"CRITICAL: Sync transaction failed, rolling back all changes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return 0, 1, 0
 
     logger.info(f"=== E-grip sync compleet: {success_count} succesvol, {skipped_count} geskipt, {error_count} fouten ===")
     return success_count, error_count, skipped_count
