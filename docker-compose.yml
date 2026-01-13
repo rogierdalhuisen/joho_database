@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Django Web Application Service
   web:
@@ -54,13 +52,18 @@ services:
     container_name: expat_insurance_metabase
     ports:
       - "3000:3000"  # Metabase web interface
-    volumes:
-      - metabase_data:/metabase-data  # Persistent storage for Metabase settings
     environment:
-      MB_DB_FILE: /metabase-data/metabase.db  # Use H2 embedded database
+      # Use PostgreSQL for Metabase's internal database (more stable than H2)
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_internal
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${DB_USER}
+      MB_DB_PASS: ${DB_PASSWORD}
+      MB_DB_HOST: db
       MB_EMOJI_IN_LOGS: "false"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
@@ -70,6 +73,4 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  metabase_data:
     driver: local

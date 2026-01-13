@@ -189,10 +189,22 @@ class AdviesAanvragenAdmin(admin.ModelAdmin):
 
 @admin.register(Contracten)
 class ContractenAdmin(admin.ModelAdmin):
-    list_display = ('contract_id', 'polisnummer', 'relatie', 'branche', 'datum_ingang', 'ts_aangemaakt')
+    list_display = ('contract_id', 'polisnummer', 'get_relatie_display', 'get_relatie_id', 'branche', 'datum_ingang', 'ts_aangemaakt')
     list_filter = ('branche', 'datum_ingang')
     search_fields = ('polisnummer', 'relatie__hoofdnaam', 'relatie__relatie_id')
     date_hierarchy = 'datum_ingang'
+
+    def get_relatie_display(self, obj):
+        """Display relation name."""
+        return obj.relatie.hoofdnaam or 'Geen naam'
+    get_relatie_display.short_description = 'Relatie Naam'
+    get_relatie_display.admin_order_field = 'relatie__hoofdnaam'
+
+    def get_relatie_id(self, obj):
+        """Display Assuportal relatie_id."""
+        return obj.relatie.relatie_id or '-'
+    get_relatie_id.short_description = 'Relatie ID (Assuportal)'
+    get_relatie_id.admin_order_field = 'relatie__relatie_id'
 
 
 # --- Verzekering Regio & Verzekering Admin ---
@@ -219,9 +231,21 @@ class VerzekeringRegioAdmin(admin.ModelAdmin):
 
 @admin.register(VerzekeringRegioLanden)
 class VerzekeringRegioLandenAdmin(admin.ModelAdmin):
-    list_display = ('verzekering_regio', 'land_code')
+    list_display = ('get_verzekeraar_regio', 'get_land_naam')
     list_filter = ('verzekering_regio__verzekeraar_naam',)
     search_fields = ('land_code__land_naam', 'verzekering_regio__verzekeraar_naam', 'verzekering_regio__regio_naam')
+
+    def get_verzekeraar_regio(self, obj):
+        """Display verzekeraar and regio name."""
+        return f"{obj.verzekering_regio.verzekeraar_naam} - {obj.verzekering_regio.regio_naam}"
+    get_verzekeraar_regio.short_description = 'Verzekering Regio'
+    get_verzekeraar_regio.admin_order_field = 'verzekering_regio__verzekeraar_naam'
+
+    def get_land_naam(self, obj):
+        """Display country name."""
+        return obj.land_code.land_naam
+    get_land_naam.short_description = 'Land'
+    get_land_naam.admin_order_field = 'land_code__land_naam'
 
 
 # --- Verzekering Admin with Inlines ---
