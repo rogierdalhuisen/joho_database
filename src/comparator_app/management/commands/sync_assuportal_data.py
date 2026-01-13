@@ -38,7 +38,13 @@ class Command(BaseCommand):
         parser.add_argument(
             '--use-detail',
             action='store_true',
-            help='Gebruik DETAIL endpoint voor Relaties (langzaam maar volledig met personen)'
+            help='Gebruik DETAIL endpoint voor Relaties en Contracten (langzaam maar volledig met alle velden)'
+        )
+
+        parser.add_argument(
+            '--no-detail',
+            action='store_true',
+            help='Gebruik ALLEEN LIST endpoint (sneller maar mogelijk incomplete data)'
         )
 
         parser.add_argument(
@@ -62,7 +68,7 @@ class Command(BaseCommand):
         sync_contracten_flag = options['contracten_only'] or options['all'] or (not options['relaties_only'])
 
         page_size = options['page_size']
-        use_detail = options['use_detail']
+        use_detail = options['use_detail'] or not options['no_detail']  # Default True unless --no-detail specified
         max_pages = options['max_pages']
         dry_run = options['dry_run']
 
@@ -78,7 +84,9 @@ class Command(BaseCommand):
         if max_pages:
             self.stdout.write(f"  - Max paginas: {max_pages} (TEST MODE)")
         if use_detail:
-            self.stdout.write(f"  - Detail mode: ENABLED (met personen)")
+            self.stdout.write(f"  - Detail mode: ENABLED (volledige data voor relaties + contracten)")
+        else:
+            self.stdout.write(f"  - Detail mode: DISABLED (alleen list data, mogelijk incomplete velden)")
 
         if dry_run:
             self.stdout.write(self.style.WARNING(f"  - DRY RUN: Enabled (geen wijzigingen worden opgeslagen)"))
@@ -133,6 +141,7 @@ class Command(BaseCommand):
             try:
                 success, errors, skipped = sync_contracten(
                     page_size=page_size,
+                    use_detail=use_detail,
                     max_pages=max_pages,
                     dry_run=dry_run
                 )

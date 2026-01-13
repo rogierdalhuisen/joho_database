@@ -34,18 +34,15 @@ class AssuportalPersoon(BaseModel):
     """Person data from Assuportal API."""
 
     id: int = Field(..., ge=1)
-    naam: str = Field(..., min_length=1)
+    naam: str = Field(default='')  # Allow empty names (will be filtered out later)
 
     model_config = ConfigDict(extra='ignore')
 
     @field_validator('naam')
     @classmethod
     def validate_naam(cls, v: str) -> str:
-        """Ensure name is not empty after stripping."""
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError('Person name cannot be empty')
-        return stripped
+        """Clean name but allow empty (will be filtered during processing)."""
+        return v.strip()
 
 
 class AssuportalRelatieListItem(BaseModel):
@@ -140,6 +137,7 @@ class AssuportalContract(BaseModel):
     id: int = Field(..., ge=1, description="Contract ID")
     relatie_id: int = Field(..., ge=1, description="Related Relatie ID")
     polisnummer: str = Field(default='', description="Policy number")
+    omschrijving: Optional[str] = None
     branche: Optional[str] = None
     datum_ingang: Optional[str] = None
     ts_aangemaakt: Optional[str] = None
@@ -244,6 +242,7 @@ class ContractInput(BaseModel):
     contract_id: int = Field(..., ge=1)
     relatie_id: int = Field(..., ge=1)
     polisnummer: str = Field(default='')
+    omschrijving: Optional[str] = None
     branche: Optional[str] = None
     datum_ingang: Optional[date] = None
     ts_aangemaakt: Optional[datetime] = None
@@ -254,16 +253,19 @@ class ContractInput(BaseModel):
     @field_validator('datum_ingang')
     @classmethod
     def validate_datum_ingang_not_future(cls, v: Optional[date]) -> Optional[date]:
-        """Validate date is not in far future (sanity check)."""
+        """Validate date is not in far future (sanity check) - but allow and log suspicious dates."""
         if v is None:
             return v
 
         today = date.today()
-        # Allow up to 1 year in future for contract start dates
+        # Allow up to 5 years in future for contract start dates
         from datetime import timedelta
-        max_future = today + timedelta(days=365)
+        max_future = today + timedelta(days=365*5)
 
         if v > max_future:
-            raise ValueError(f'Contract start date {v} is too far in the future')
+            # Log warning but don't fail - let the data through
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f'Suspicious contract start date {v} (far in future) - keeping as-is')
 
         return v

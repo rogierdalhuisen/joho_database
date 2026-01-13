@@ -12,6 +12,7 @@ from .schemas_assuportal import (
     AssuportalRelatiesAPIResponse,
     AssuportalRelatieDetailAPIResponse,
     AssuportalContractenAPIResponse,
+    AssuportalContractDetailAPIResponse,
     AssuportalRelatieListItem,
     AssuportalRelatieDetail,
     AssuportalContract,
@@ -221,6 +222,48 @@ def fetch_contracten_list(page: int = 1, size: int = 50) -> Optional[AssuportalC
         return None
 
 
+def fetch_contract_detail(contract_id: int) -> Optional[AssuportalContractDetailAPIResponse]:
+    """
+    Haal volledige details van één contract op (DETAIL endpoint) met validatie.
+
+    Args:
+        contract_id: Het ID van het contract
+
+    Returns:
+        Validated AssuportalContractDetailAPIResponse of None bij fout
+    """
+    api_url = get_env('ASSUPORTAL_CONTRACTEN')
+    api_token = get_env('ASSUPORTAL_API_TOKEN')
+
+    if not api_url or not api_token:
+        logger.critical("ASSUPORTAL_CONTRACTEN of ASSUPORTAL_API_TOKEN niet geconfigureerd in .env")
+        return None
+
+    headers = {
+        'Authorization': f'Bearer {api_token}',
+        'Content-Type': 'application/json'
+    }
+
+    detail_url = f"{api_url}/{contract_id}"
+
+    try:
+        response = requests.get(detail_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        raw_data = response.json()
+
+        # Validate with Pydantic
+        try:
+            validated_data = AssuportalContractDetailAPIResponse(**raw_data)
+            return validated_data
+        except ValidationError as e:
+            logger.error(f"Contract detail API validation failed for {contract_id}: {e}")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API-call naar Contract detail {contract_id} mislukt: {e}")
+        return None
+
+
 # ============================================================================
 # TRANSFORMATION FUNCTIONS
 # ============================================================================
@@ -299,6 +342,7 @@ def transform_contract_to_input(api_contract: AssuportalContract) -> Optional[Co
             'contract_id': api_contract.id,
             'relatie_id': api_contract.relatie_id,
             'polisnummer': api_contract.polisnummer,
+            'omschrijving': api_contract.omschrijving,
             'branche': api_contract.branche,
             'datum_ingang': convert_invalid_date(api_contract.datum_ingang),
             'ts_aangemaakt': convert_invalid_datetime(api_contract.ts_aangemaakt),
@@ -461,6 +505,7 @@ def save_contract_from_input(
                 contract_id=contract_input.contract_id,
                 defaults={
                     'polisnummer': contract_input.polisnummer,
+                    'omschrijving': contract_input.omschrijving,
                     'branche': contract_input.branche,
                     'relatie': relatie,
                     'datum_ingang': contract_input.datum_ingang,
@@ -605,6 +650,11 @@ def sync_relaties(
 
                             # Transform personen
                             for persoon in detail_response.data.personen:
+                                # Skip persons with empty names (corrupted data)
+                                if not persoon.naam or not persoon.naam.strip():
+                                    logger.warning(f"Skipping persoon {persoon.id} in relatie {relatie_id}: empty name")
+                                    continue
+
                                 try:
                                     persoon_input = PersoonInput(
                                         api_persoon_id=persoon.id,
@@ -669,6 +719,7 @@ def sync_relaties(
 
 def sync_contracten(
     page_size: int = 50,
+    use_detail: bool = True,
     max_pages: Optional[int] = None,
     dry_run: bool = False
 ) -> Tuple[int, int, int]:
@@ -677,6 +728,7 @@ def sync_contracten(
 
     Args:
         page_size: Aantal records per pagina
+        use_detail: True om DETAIL endpoint te gebruiken (langzaam maar volledig met branche, datum_ingang, omschrijving)
         max_pages: Maximaal aantal paginas (voor testen), None = alle
         dry_run: If True, don't actually save to database
 
@@ -718,8 +770,20 @@ def sync_contracten(
 
             # Verwerk elk contract
             for contract_data in data_list:
-                # Transform to input
-                contract_input = transform_contract_to_input(contract_data)
+                contract_id = contract_data.id
+
+                # Als use_detail: haal volledige data op
+                if use_detail:
+                    detail_response = fetch_contract_detail(contract_id)
+                    if detail_response and detail_response.result == 'ok':
+                        # Transform detail to input
+                        contract_input = transform_contract_to_input(detail_response.data)
+                    else:
+                        logger.error(f"Kon detail niet ophalen voor Contract {contract_id}")
+                        contract_input = None
+                else:
+                    # Gebruik LIST data
+                    contract_input = transform_contract_to_input(contract_data)
 
                 if not contract_input:
                     error_count += 1

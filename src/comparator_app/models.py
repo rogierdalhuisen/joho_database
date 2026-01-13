@@ -249,6 +249,7 @@ class AdviesAanvragen(models.Model):
 class Contracten(models.Model):
     contract_id = models.IntegerField(primary_key=True)
     polisnummer = models.CharField(max_length=255, blank=True)
+    omschrijving = models.CharField(max_length=255, null=True, blank=True)
     branche = models.CharField(max_length=255, null=True, blank=True)
     relatie = models.ForeignKey(Relaties, on_delete=models.PROTECT, related_name='contracten')
     datum_ingang = models.DateField(null=True, blank=True)

@@ -189,9 +189,9 @@ class AdviesAanvragenAdmin(admin.ModelAdmin):
 
 @admin.register(Contracten)
 class ContractenAdmin(admin.ModelAdmin):
-    list_display = ('contract_id', 'polisnummer', 'get_relatie_display', 'get_relatie_id', 'branche', 'datum_ingang', 'ts_aangemaakt')
+    list_display = ('contract_id', 'polisnummer', 'omschrijving', 'get_relatie_display', 'get_relatie_id', 'branche', 'datum_ingang', 'ts_aangemaakt')
     list_filter = ('branche', 'datum_ingang')
-    search_fields = ('polisnummer', 'relatie__hoofdnaam', 'relatie__relatie_id')
+    search_fields = ('polisnummer', 'omschrijving', 'relatie__hoofdnaam', 'relatie__relatie_id')
     date_hierarchy = 'datum_ingang'
 
     def get_relatie_display(self, obj):
