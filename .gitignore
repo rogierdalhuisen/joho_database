@@ -46,3 +46,5 @@ src/comparator_app/notebook.ipynb
 
 *.md
 !README.md
+# Log files
+logs/*.log

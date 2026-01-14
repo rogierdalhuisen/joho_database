@@ -75,6 +75,12 @@ python manage.py sync_assuportal_data --all
 
 # Met volledige personen details (langzaam!)
 python manage.py sync_assuportal_data --relaties-only --use-detail
+
+# 🆕 Met datum filter (alleen wijzigingen in bepaalde periode)
+python manage.py sync_assuportal_data --all --datum-van 2015-11-11 --datum-tot 2015-11-12
+
+# Incrementele sync: alleen laatste 7 dagen
+python manage.py sync_assuportal_data --all --datum-van 2025-01-07 --datum-tot 2025-01-14
 ```
 
 ### Output
@@ -88,6 +94,17 @@ python manage.py sync_assuportal_data --relaties-only --use-detail
 - [ ] Docker compose draait
 - [ ] `.env` bevat `ASSUPORTAL_RELATIES`, `ASSUPORTAL_CONTRACTEN`, `ASSUPORTAL_API_TOKEN`
 - [ ] Test eerst met `--max-pages 1` bij grote syncs
+
+### 🎯 Datum Filters (Nieuw!)
+
+Je kunt nu specifieke datumperiodes syncen. De API geeft alle records die **aangemaakt of gewijzigd** zijn in die periode.
+
+**Gebruik cases:**
+- **Eerste sync**: Alles importeren zonder filter
+- **Dagelijkse updates**: `--datum-van [gisteren] --datum-tot [vandaag]`
+- **Specifieke periode debuggen**: `--datum-van 2015-11-11 --datum-tot 2015-11-12`
+
+**Formaat:** Altijd `YYYY-MM-DD` (bijvoorbeeld: `2025-01-14`)
 
 ---
 
@@ -129,7 +146,12 @@ python manage.py sync_egrip_data --form-id 2
 
 ### Wekelijks (Maandag)
 ```bash
+# Optie 1: Volledige sync (alles)
 python manage.py sync_assuportal_data --all
+
+# Optie 2: Incrementele sync (alleen laatste week)
+# Vervang datum door 7 dagen geleden en vandaag
+python manage.py sync_assuportal_data --all --datum-van 2025-01-07 --datum-tot 2025-01-14
 ```
 
 ---
@@ -146,7 +168,17 @@ python manage.py sync_assuportal_data --all
 → Start docker: `docker compose up -d`
 
 ### "Veel fouten bij sync"
-→ Check logs: `tail -f logs/django.log` (als je logging hebt)
+→ Check logs:
+```bash
+# Bekijk sync logs
+tail -n 100 logs/sync.log
+
+# Zoek naar warnings
+grep WARNING logs/sync.log
+
+# Zoek naar fouten
+grep ERROR logs/sync.log
+```
 
 ---
 

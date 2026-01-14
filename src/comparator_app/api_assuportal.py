@@ -82,13 +82,20 @@ def convert_invalid_datetime(datetime_string: Optional[str]) -> Optional[datetim
 # API FETCH FUNCTIONS
 # ============================================================================
 
-def fetch_relaties_list(page: int = 1, size: int = 50) -> Optional[AssuportalRelatiesAPIResponse]:
+def fetch_relaties_list(
+    page: int = 1,
+    size: int = 50,
+    datum_van: Optional[date] = None,
+    datum_tot: Optional[date] = None
+) -> Optional[AssuportalRelatiesAPIResponse]:
     """
     Haal een pagina met relaties op van de Assuportal API (LIST endpoint) met validatie.
 
     Args:
         page: Paginanummer (start bij 1)
         size: Aantal records per pagina
+        datum_van: Filter voor relaties aangemaakt/gewijzigd vanaf deze datum (optioneel)
+        datum_tot: Filter voor relaties aangemaakt/gewijzigd tot deze datum (optioneel)
 
     Returns:
         Validated AssuportalRelatiesAPIResponse of None bij fout
@@ -110,8 +117,17 @@ def fetch_relaties_list(page: int = 1, size: int = 50) -> Optional[AssuportalRel
         'size': size
     }
 
+    # Add date filters if provided
+    if datum_van:
+        params['filter[datum_van]'] = datum_van.strftime('%Y-%m-%d')
+    if datum_tot:
+        params['filter[datum_tot]'] = datum_tot.strftime('%Y-%m-%d')
+
     try:
-        logger.info(f"Fetching relaties: pagina {page}, size {size}")
+        filter_info = ""
+        if datum_van or datum_tot:
+            filter_info = f" (filter: {datum_van or 'begin'} tot {datum_tot or 'eind'})"
+        logger.info(f"Fetching relaties: pagina {page}, size {size}{filter_info}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         raw_data = response.json()
@@ -173,13 +189,20 @@ def fetch_relatie_detail(relatie_id: int) -> Optional[AssuportalRelatieDetailAPI
         return None
 
 
-def fetch_contracten_list(page: int = 1, size: int = 50) -> Optional[AssuportalContractenAPIResponse]:
+def fetch_contracten_list(
+    page: int = 1,
+    size: int = 50,
+    datum_van: Optional[date] = None,
+    datum_tot: Optional[date] = None
+) -> Optional[AssuportalContractenAPIResponse]:
     """
     Haal een pagina met contracten op van de Assuportal API (LIST endpoint) met validatie.
 
     Args:
         page: Paginanummer (start bij 1)
         size: Aantal records per pagina
+        datum_van: Filter voor contracten aangemaakt/gewijzigd vanaf deze datum (optioneel)
+        datum_tot: Filter voor contracten aangemaakt/gewijzigd tot deze datum (optioneel)
 
     Returns:
         Validated AssuportalContractenAPIResponse of None bij fout
@@ -201,8 +224,17 @@ def fetch_contracten_list(page: int = 1, size: int = 50) -> Optional[AssuportalC
         'size': size
     }
 
+    # Add date filters if provided
+    if datum_van:
+        params['filter[datum_van]'] = datum_van.strftime('%Y-%m-%d')
+    if datum_tot:
+        params['filter[datum_tot]'] = datum_tot.strftime('%Y-%m-%d')
+
     try:
-        logger.info(f"Fetching contracten: pagina {page}, size {size}")
+        filter_info = ""
+        if datum_van or datum_tot:
+            filter_info = f" (filter: {datum_van or 'begin'} tot {datum_tot or 'eind'})"
+        logger.info(f"Fetching contracten: pagina {page}, size {size}{filter_info}")
         response = requests.get(api_url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         raw_data = response.json()
@@ -581,7 +613,9 @@ def sync_relaties(
     page_size: int = 50,
     use_detail: bool = False,
     max_pages: Optional[int] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    datum_van: Optional[date] = None,
+    datum_tot: Optional[date] = None
 ) -> Tuple[int, int]:
     """
     Synchroniseer Relaties van Assuportal API naar database met validatie.
@@ -591,11 +625,16 @@ def sync_relaties(
         use_detail: True om DETAIL endpoint te gebruiken (langzaam maar volledig)
         max_pages: Maximaal aantal paginas (voor testen), None = alle
         dry_run: If True, don't actually save to database
+        datum_van: Filter voor relaties aangemaakt/gewijzigd vanaf deze datum (optioneel)
+        datum_tot: Filter voor relaties aangemaakt/gewijzigd tot deze datum (optioneel)
 
     Returns:
         Tuple van (success_count, error_count)
     """
-    logger.info(f"=== Start Relaties synchronisatie {'(DRY RUN)' if dry_run else ''} ===")
+    filter_msg = ""
+    if datum_van or datum_tot:
+        filter_msg = f" [filter: {datum_van or 'begin'} tot {datum_tot or 'eind'}]"
+    logger.info(f"=== Start Relaties synchronisatie {'(DRY RUN)' if dry_run else ''}{filter_msg} ===")
 
     success_count = 0
     error_count = 0
@@ -612,7 +651,12 @@ def sync_relaties(
                 break
 
             # Haal lijst op met validatie
-            response = fetch_relaties_list(page=page, size=page_size)
+            response = fetch_relaties_list(
+                page=page,
+                size=page_size,
+                datum_van=datum_van,
+                datum_tot=datum_tot
+            )
 
             if not response or response.result != 'ok':
                 logger.error(f"Geen geldige response voor pagina {page}")
@@ -721,7 +765,9 @@ def sync_contracten(
     page_size: int = 50,
     use_detail: bool = True,
     max_pages: Optional[int] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    datum_van: Optional[date] = None,
+    datum_tot: Optional[date] = None
 ) -> Tuple[int, int, int]:
     """
     Synchroniseer Contracten van Assuportal API naar database met validatie.
@@ -731,11 +777,16 @@ def sync_contracten(
         use_detail: True om DETAIL endpoint te gebruiken (langzaam maar volledig met branche, datum_ingang, omschrijving)
         max_pages: Maximaal aantal paginas (voor testen), None = alle
         dry_run: If True, don't actually save to database
+        datum_van: Filter voor contracten aangemaakt/gewijzigd vanaf deze datum (optioneel)
+        datum_tot: Filter voor contracten aangemaakt/gewijzigd tot deze datum (optioneel)
 
     Returns:
         Tuple van (success_count, error_count, skipped_count)
     """
-    logger.info(f"=== Start Contracten synchronisatie {'(DRY RUN)' if dry_run else ''} ===")
+    filter_msg = ""
+    if datum_van or datum_tot:
+        filter_msg = f" [filter: {datum_van or 'begin'} tot {datum_tot or 'eind'}]"
+    logger.info(f"=== Start Contracten synchronisatie {'(DRY RUN)' if dry_run else ''}{filter_msg} ===")
 
     success_count = 0
     error_count = 0
@@ -753,7 +804,12 @@ def sync_contracten(
                 break
 
             # Haal lijst op met validatie
-            response = fetch_contracten_list(page=page, size=page_size)
+            response = fetch_contracten_list(
+                page=page,
+                size=page_size,
+                datum_van=datum_van,
+                datum_tot=datum_tot
+            )
 
             if not response or response.result != 'ok':
                 logger.error(f"Geen geldige response voor pagina {page}")

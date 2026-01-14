@@ -234,41 +234,45 @@ class AdviesAanvraagInput(BaseModel):
                      'kind3_geboortedatum', 'kind4_geboortedatum')
     @classmethod
     def validate_birth_dates(cls, v: Optional[date]) -> Optional[date]:
-        """Validate birthdates are not in the future or too far in past."""
+        """Validate birthdates - log warnings for suspicious data but keep it."""
         if v is None:
             return v
 
+        import logging
+        logger = logging.getLogger(__name__)
         today = date.today()
 
-        # Birthdates shouldn't be in the future
+        # Birthdates shouldn't be in the future - but keep the data with warning
         if v > today:
-            raise ValueError(f'Birthdate {v} cannot be in the future')
+            logger.warning(f'Birthdate {v} is in the future - keeping as-is but likely incorrect')
 
-        # Sanity check: not before 1900
+        # Sanity check: not before 1900 - warn but keep
         if v.year < 1900:
-            raise ValueError(f'Birthdate {v} seems invalid (before 1900)')
+            logger.warning(f'Birthdate {v} seems invalid (before 1900) - keeping as-is but likely incorrect')
 
         return v
 
     @field_validator('vertrekdatum')
     @classmethod
     def validate_departure_date(cls, v: Optional[date]) -> Optional[date]:
-        """Validate departure date - can be in future but not too far."""
+        """Validate departure date - log warnings for suspicious data but keep it."""
         if v is None:
             return v
 
+        import logging
+        logger = logging.getLogger(__name__)
         today = date.today()
 
         # Allow future dates (people plan to travel)
-        # But sanity check: not more than 5 years in future
+        # But sanity check: not more than 5 years in future - warn but keep
         from datetime import timedelta
         max_future = today + timedelta(days=365 * 5)
         if v > max_future:
-            raise ValueError(f'Departure date {v} is unreasonably far in future (>5 years)')
+            logger.warning(f'Departure date {v} is unreasonably far in future (>5 years) - keeping as-is but likely incorrect')
 
-        # Sanity check: not before 2000
+        # Sanity check: not before 2000 - warn but keep
         if v.year < 2000:
-            raise ValueError(f'Departure date {v} seems invalid (before 2000)')
+            logger.warning(f'Departure date {v} seems invalid (before 2000) - keeping as-is, possibly data entry error')
 
         return v
 

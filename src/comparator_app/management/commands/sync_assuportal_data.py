@@ -1,4 +1,5 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from datetime import datetime
 from comparator_app.api_assuportal import sync_relaties, sync_contracten
 
 
@@ -60,6 +61,21 @@ class Command(BaseCommand):
             help='Preview changes without committing to database (DRY RUN mode)'
         )
 
+        # Date filters
+        parser.add_argument(
+            '--datum-van',
+            type=str,
+            default=None,
+            help='Filter: alleen records aangemaakt/gewijzigd vanaf deze datum (format: YYYY-MM-DD, bijv. 2015-11-11)'
+        )
+
+        parser.add_argument(
+            '--datum-tot',
+            type=str,
+            default=None,
+            help='Filter: alleen records aangemaakt/gewijzigd tot deze datum (format: YYYY-MM-DD, bijv. 2015-11-12)'
+        )
+
     def handle(self, *args, **options):
         """Voer de synchronisatie uit."""
 
@@ -71,6 +87,26 @@ class Command(BaseCommand):
         use_detail = options['use_detail'] or not options['no_detail']  # Default True unless --no-detail specified
         max_pages = options['max_pages']
         dry_run = options['dry_run']
+
+        # Parse date filters
+        datum_van = None
+        datum_tot = None
+
+        if options['datum_van']:
+            try:
+                datum_van = datetime.strptime(options['datum_van'], '%Y-%m-%d').date()
+            except ValueError:
+                raise CommandError(f"Ongeldige datum voor --datum-van: {options['datum_van']}. Gebruik format YYYY-MM-DD")
+
+        if options['datum_tot']:
+            try:
+                datum_tot = datetime.strptime(options['datum_tot'], '%Y-%m-%d').date()
+            except ValueError:
+                raise CommandError(f"Ongeldige datum voor --datum-tot: {options['datum_tot']}. Gebruik format YYYY-MM-DD")
+
+        # Validate date range
+        if datum_van and datum_tot and datum_van > datum_tot:
+            raise CommandError("--datum-van moet voor --datum-tot liggen")
 
         # Header
         self.stdout.write(self.style.SUCCESS("=" * 60))
@@ -87,6 +123,10 @@ class Command(BaseCommand):
             self.stdout.write(f"  - Detail mode: ENABLED (volledige data voor relaties + contracten)")
         else:
             self.stdout.write(f"  - Detail mode: DISABLED (alleen list data, mogelijk incomplete velden)")
+
+        # Date filter info
+        if datum_van or datum_tot:
+            self.stdout.write(f"  - Datum filter: {datum_van or 'begin'} tot {datum_tot or 'eind'}")
 
         if dry_run:
             self.stdout.write(self.style.WARNING(f"  - DRY RUN: Enabled (geen wijzigingen worden opgeslagen)"))
@@ -109,7 +149,9 @@ class Command(BaseCommand):
                     page_size=page_size,
                     use_detail=use_detail,
                     max_pages=max_pages,
-                    dry_run=dry_run
+                    dry_run=dry_run,
+                    datum_van=datum_van,
+                    datum_tot=datum_tot
                 )
 
                 self.stdout.write("")
@@ -143,7 +185,9 @@ class Command(BaseCommand):
                     page_size=page_size,
                     use_detail=use_detail,
                     max_pages=max_pages,
-                    dry_run=dry_run
+                    dry_run=dry_run,
+                    datum_van=datum_van,
+                    datum_tot=datum_tot
                 )
 
                 self.stdout.write("")
