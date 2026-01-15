@@ -320,7 +320,6 @@ def transform_relatie_list_item_to_input(
             'hoofdnaam': api_relatie.naam,
             'ts_aangemaakt': convert_invalid_datetime(api_relatie.ts_aangemaakt),
             'email_adressen': email_adressen,
-            'source': 'api'
         }
 
         return RelatieInput(**input_data)
@@ -350,7 +349,6 @@ def transform_relatie_detail_to_input(
             'hoofdnaam': api_relatie.naam,
             'ts_aangemaakt': convert_invalid_datetime(api_relatie.ts_aangemaakt),
             'email_adressen': email_adressen,
-            'source': 'api'
         }
 
         return RelatieInput(**input_data)
@@ -391,6 +389,38 @@ def transform_contract_to_input(api_contract: AssuportalContract) -> Optional[Co
 # SAVE FUNCTIONS
 # ============================================================================
 
+def merge_email_lists(existing_emails: List[str], new_emails: List[str]) -> List[str]:
+    """
+    Combineer twee email lijsten, behoud unieke emails (case-insensitive).
+
+    Args:
+        existing_emails: Bestaande emails in de database
+        new_emails: Nieuwe emails van de API
+
+    Returns:
+        Gecombineerde lijst met unieke emails
+    """
+    # Use lowercase for deduplication, but keep original casing from new_emails (API is authoritative for format)
+    seen = set()
+    merged = []
+
+    # First add new emails (API is source of truth for formatting)
+    for email in new_emails:
+        lower = email.lower()
+        if lower not in seen:
+            seen.add(lower)
+            merged.append(email)
+
+    # Then add existing emails that aren't in the new list
+    for email in existing_emails:
+        lower = email.lower()
+        if lower not in seen:
+            seen.add(lower)
+            merged.append(email)
+
+    return merged
+
+
 def save_relatie_from_input(
     relatie_input: RelatieInput,
     personen_data: Optional[List[PersoonInput]] = None,
@@ -401,8 +431,8 @@ def save_relatie_from_input(
     Sla een Relatie op vanuit gevalideerde input met MERGE strategie.
 
     MERGE STRATEGIE: Als een relatie met dit email al bestaat vanuit een AdviesAanvraag
-    (relatie_id=None, source='adviesaanvraag'), dan wordt deze relatie ge-upgrade met
-    de API data in plaats van een nieuwe aan te maken.
+    (relatie_id=None), dan wordt deze relatie ge-upgrade met de API data in plaats van
+    een nieuwe aan te maken. Email adressen worden gecombineerd (union).
 
     Args:
         relatie_input: Validated RelatieInput object
@@ -428,8 +458,8 @@ def save_relatie_from_input(
                 # Bestaande API relatie gevonden, update deze
                 relatie.hoofdnaam = relatie_input.hoofdnaam
                 relatie.ts_aangemaakt = relatie_input.ts_aangemaakt
-                relatie.email_adressen = relatie_input.email_adressen
-                relatie.source = 'api'
+                # Merge emails: combine existing with API emails
+                relatie.email_adressen = merge_email_lists(relatie.email_adressen, relatie_input.email_adressen)
                 relatie.save()
                 action = "bijgewerkt (bestaande API relatie)"
                 logger.info(f"Relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam}): {action}")
@@ -440,12 +470,10 @@ def save_relatie_from_input(
                 if relatie_input.email_adressen:
                     for email in relatie_input.email_adressen:
                         # Zoek relatie die:
-                        # 1. Nog geen relatie_id heeft (None)
-                        # 2. Van formulier komt (source='adviesaanvraag')
-                        # 3. Dit email bevat
+                        # 1. Nog geen relatie_id heeft (None) - niet gekoppeld aan API
+                        # 2. Dit email bevat
                         orphaned_relatie = Relaties.objects.filter(
                             relatie_id__isnull=True,
-                            source='adviesaanvraag',
                             email_adressen__contains=[email]
                         ).first()
 
@@ -454,12 +482,12 @@ def save_relatie_from_input(
                             break
 
                 if orphaned_relatie:
-                    # MERGE: Update de orphaned relatie met API data
+                    # MERGE: Update de orphaned relatie met API data, combine emails
+                    existing_emails = orphaned_relatie.email_adressen or []
                     orphaned_relatie.relatie_id = relatie_input.relatie_id
                     orphaned_relatie.hoofdnaam = relatie_input.hoofdnaam
                     orphaned_relatie.ts_aangemaakt = relatie_input.ts_aangemaakt
-                    orphaned_relatie.email_adressen = relatie_input.email_adressen
-                    orphaned_relatie.source = 'api'
+                    orphaned_relatie.email_adressen = merge_email_lists(existing_emails, relatie_input.email_adressen)
                     orphaned_relatie.save()
                     relatie = orphaned_relatie
                     action = "ge-merged (formulier → API)"
@@ -471,7 +499,6 @@ def save_relatie_from_input(
                         hoofdnaam=relatie_input.hoofdnaam,
                         ts_aangemaakt=relatie_input.ts_aangemaakt,
                         email_adressen=relatie_input.email_adressen,
-                        source='api'
                     )
                     action = "aangemaakt (nieuwe API relatie)"
                     logger.info(f"Relatie {relatie_input.relatie_id} ({relatie_input.hoofdnaam}): {action}")
@@ -593,13 +620,12 @@ def find_or_create_relatie_by_email(email: str) -> Relaties:
         logger.info(f"Email {email} gevonden in Persoon {persoon.persoon_id}, linked to Relatie {persoon.relatie.relatie_id}")
         return persoon.relatie
 
-    # Geen match: maak nieuwe Relatie
+    # Geen match: maak nieuwe Relatie (nog niet gekoppeld aan API)
     logger.info(f"Email {email} niet gevonden, nieuwe Relatie aanmaken")
     relatie = Relaties.objects.create(
-        relatie_id=None,  # Nog geen API ID
+        relatie_id=None,  # Nog geen API ID - wordt later via sync gekoppeld
         hoofdnaam=None,
         email_adressen=[email],
-        source='adviesaanvraag'
     )
 
     return relatie

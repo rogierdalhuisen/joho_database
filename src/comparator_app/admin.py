@@ -38,11 +38,16 @@ class PersonenInline(admin.TabularInline):
 
 @admin.register(Relaties)
 class RelatiesAdmin(admin.ModelAdmin):
-    list_display = ('relatie_id', 'hoofdnaam', 'get_email_display', 'source', 'aangemaakt_op')
+    list_display = ('relatie_id', 'hoofdnaam', 'get_email_display', 'has_api_link', 'aangemaakt_op')
     search_fields = ('hoofdnaam', 'relatie_id')
-    list_filter = ('source', 'aangemaakt_op')
+    list_filter = ('aangemaakt_op',)
     date_hierarchy = 'aangemaakt_op'
     inlines = [PersonenInline]
+
+    def has_api_link(self, obj):
+        return obj.relatie_id is not None
+    has_api_link.short_description = 'API Linked'
+    has_api_link.boolean = True
 
     def get_email_display(self, obj):
         if obj.email_adressen:

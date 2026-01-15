@@ -205,7 +205,6 @@ class RelatieInput(BaseModel):
     hoofdnaam: str = Field(..., min_length=1)
     ts_aangemaakt: Optional[datetime] = None
     email_adressen: List[str] = Field(default_factory=list)
-    source: str = Field(default='api', pattern='^(api|adviesaanvraag)$')
 
     model_config = ConfigDict(extra='forbid')
 

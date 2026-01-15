@@ -16,16 +16,10 @@ class Landen(models.Model):
 
 
 class Relaties(models.Model):
-    SOURCE_CHOICES = [
-        ('api', 'Assuportal API'),
-        ('adviesaanvraag', 'Advies Aanvraag'),
-    ]
-
     relatie_id = models.IntegerField(null=True, blank=True, unique=True, db_index=True)
     ts_aangemaakt = models.DateTimeField(null=True, blank=True)
     hoofdnaam = models.CharField(max_length=255, null=True, blank=True)
     email_adressen = models.JSONField(default=list, blank=True)
-    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='api')
     aangemaakt_op = models.DateTimeField(default=timezone.now)
 
     class Meta:

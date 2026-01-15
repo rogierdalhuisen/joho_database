@@ -398,8 +398,8 @@ def save_aanvraag_from_input(
             # Find or create Relatie
             relatie = find_or_create_relatie_by_email(validated_input.email)
 
-            # Update relatie stamgegevens als nog 'adviesaanvraag'
-            if relatie.source == 'adviesaanvraag' and not relatie.hoofdnaam:
+            # Update relatie stamgegevens als nog niet gekoppeld aan API
+            if relatie.relatie_id is None and not relatie.hoofdnaam:
                 voornaam = validated_input.voorletters_roepnaam or ''
                 achternaam = validated_input.achternaam or ''
                 if voornaam or achternaam:
