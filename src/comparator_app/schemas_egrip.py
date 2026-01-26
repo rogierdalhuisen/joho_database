@@ -97,132 +97,132 @@ class AdviesAanvraagInput(BaseModel):
     """
 
     # Core identification
-    external_result_id: str = Field(..., min_length=1)
-    form_id: str
+    external_result_id: str = Field(..., min_length=1, max_length=255)
+    form_id: str = Field(..., max_length=50)
     email: EmailStr
     ingediend_op: datetime
 
     # Referral metadata
-    referral_source: Optional[str] = None
-    referral_medium: Optional[str] = None
-    referral_campaign: Optional[str] = None
+    referral_source: Optional[str] = Field(None, max_length=255)
+    referral_medium: Optional[str] = Field(None, max_length=255)
+    referral_campaign: Optional[str] = Field(None, max_length=500)
 
     # Personal info
-    advies_voor_mezelf: Optional[str] = None
-    aanhef: Optional[str] = None
-    voorletters_roepnaam: Optional[str] = Field(None, max_length=100)
-    achternaam: Optional[str] = Field(None, max_length=100)
+    advies_voor_mezelf: Optional[str] = Field(None, max_length=255)
+    aanhef: Optional[str] = Field(None, max_length=50)
+    voorletters_roepnaam: Optional[str] = Field(None, max_length=255)
+    achternaam: Optional[str] = Field(None, max_length=255)
     geboortedatum: Optional[date] = None
-    land_nationaliteit: Optional[str] = None
-    telefoonnummer: Optional[str] = Field(None, max_length=50)
-    vaste_woonplaats: Optional[str] = None
+    land_nationaliteit: Optional[str] = Field(None, max_length=255)
+    telefoonnummer: Optional[str] = Field(None, max_length=100)
+    vaste_woonplaats: Optional[str] = Field(None, max_length=500)
     geen_vaste_woonplaats: Optional[bool] = None
 
     # Multiple insured persons
-    meerdere_verzekerden: Optional[str] = None
-    partner_naam: Optional[str] = None
+    meerdere_verzekerden: Optional[str] = Field(None, max_length=500)
+    partner_naam: Optional[str] = Field(None, max_length=255)
     partner_geboortedatum: Optional[date] = None
-    partner_nationaliteit: Optional[str] = None
-    kind1_naam: Optional[str] = None
+    partner_nationaliteit: Optional[str] = Field(None, max_length=255)
+    kind1_naam: Optional[str] = Field(None, max_length=255)
     kind1_geboortedatum: Optional[date] = None
-    kind1_nationaliteit: Optional[str] = None
-    kind2_naam: Optional[str] = None
+    kind1_nationaliteit: Optional[str] = Field(None, max_length=255)
+    kind2_naam: Optional[str] = Field(None, max_length=255)
     kind2_geboortedatum: Optional[date] = None
-    kind2_nationaliteit: Optional[str] = None
-    kind3_naam: Optional[str] = None
+    kind2_nationaliteit: Optional[str] = Field(None, max_length=255)
+    kind3_naam: Optional[str] = Field(None, max_length=255)
     kind3_geboortedatum: Optional[date] = None
-    kind3_nationaliteit: Optional[str] = None
-    kind4_naam: Optional[str] = None
+    kind3_nationaliteit: Optional[str] = Field(None, max_length=255)
+    kind4_naam: Optional[str] = Field(None, max_length=255)
     kind4_geboortedatum: Optional[date] = None
-    kind4_nationaliteit: Optional[str] = None
+    kind4_nationaliteit: Optional[str] = Field(None, max_length=255)
     anders_personen: Optional[str] = None
 
     # Situation and plans
-    situatie_type: Optional[str] = None
-    bestemming_land: Optional[str] = None
+    situatie_type: Optional[str] = Field(None, max_length=500)
+    bestemming_land: Optional[str] = Field(None, max_length=255)
     vertrekdatum: Optional[date] = None
-    uitschrijven_brp: Optional[str] = None
-    huidig_woonland: Optional[str] = None
-    advies_voor: Optional[str] = None
-    hoofdreden_verblijf: Optional[str] = None
+    uitschrijven_brp: Optional[str] = Field(None, max_length=255)
+    huidig_woonland: Optional[str] = Field(None, max_length=255)
+    advies_voor: Optional[str] = Field(None, max_length=500)
+    hoofdreden_verblijf: Optional[str] = Field(None, max_length=500)
     toelichting_hoofdreden: Optional[str] = None
-    verwachte_duur_verblijf: Optional[str] = None
+    verwachte_duur_verblijf: Optional[str] = Field(None, max_length=255)
     toelichting_duur: Optional[str] = None
 
     # Work and income
     werk_omschrijving: Optional[str] = None
     plannen_omschrijving: Optional[str] = None
-    salaris_uit_nederland: Optional[str] = None
+    salaris_uit_nederland: Optional[str] = Field(None, max_length=255)
 
     # Disability insurance (AOV)
-    interesse_aov: Optional[str] = None
-    loondienst_of_zelfstandig: Optional[str] = None
-    eigen_onderneming_3jaar: Optional[str] = None
-    bruto_jaarinkomen: Optional[str] = None
+    interesse_aov: Optional[str] = Field(None, max_length=255)
+    loondienst_of_zelfstandig: Optional[str] = Field(None, max_length=255)
+    eigen_onderneming_3jaar: Optional[str] = Field(None, max_length=255)
+    bruto_jaarinkomen: Optional[str] = Field(None, max_length=255)
     aov_geen_offerte_reden: Optional[str] = None
-    loon_doorbetaald_bij_ziekte: Optional[str] = None
+    loon_doorbetaald_bij_ziekte: Optional[str] = Field(None, max_length=500)
     toelichting_uitkering: Optional[str] = None
-    bruto_salaris_inkomen: Optional[str] = None
-    salaris_per_maand_jaar: Optional[str] = None
-    bouwplaats_of_offshore: Optional[str] = None
-    bouwplaats_hoe_vaak: Optional[str] = None
-    gevaarlijke_stoffen: Optional[str] = None
+    bruto_salaris_inkomen: Optional[str] = Field(None, max_length=255)
+    salaris_per_maand_jaar: Optional[str] = Field(None, max_length=255)
+    bouwplaats_of_offshore: Optional[str] = Field(None, max_length=255)
+    bouwplaats_hoe_vaak: Optional[str] = Field(None, max_length=255)
+    gevaarlijke_stoffen: Optional[str] = Field(None, max_length=255)
     toelichting_gevaarlijke_stoffen: Optional[str] = None
     interesse_internationale_aov: Optional[str] = None
     geen_interesse_aov_reden: Optional[str] = None
-    functieomschrijving: Optional[str] = None
-    type_werkzaamheden: Optional[str] = None
-    verwacht_inkomen: Optional[str] = None
+    functieomschrijving: Optional[str] = Field(None, max_length=500)
+    type_werkzaamheden: Optional[str] = Field(None, max_length=255)
+    verwacht_inkomen: Optional[str] = Field(None, max_length=255)
     inkomen_toelichting: Optional[str] = None
 
     # Health insurance (ZKV)
-    interesse_zkv: Optional[str] = None
+    interesse_zkv: Optional[str] = Field(None, max_length=255)
     zkv_geen_interesse_reden: Optional[str] = None
-    zkv_dekkingsvariant: Optional[str] = None
-    zkv_eigen_risico_voorkeur: Optional[str] = None
-    zkv_eigen_risico_bedrag: Optional[str] = None
-    zkv_periode: Optional[str] = None
+    zkv_dekkingsvariant: Optional[str] = Field(None, max_length=255)
+    zkv_eigen_risico_voorkeur: Optional[str] = Field(None, max_length=255)
+    zkv_eigen_risico_bedrag: Optional[str] = Field(None, max_length=255)
+    zkv_periode: Optional[str] = Field(None, max_length=255)
     zkv_periode_omschrijving_motivatie: Optional[str] = None
     zkv_periode_omschrijving: Optional[str] = None
-    huidige_verzekeraar: Optional[str] = None
-    voorkeur_verzekeraar: Optional[str] = None
-    medische_bijzonderheden: Optional[str] = None
+    huidige_verzekeraar: Optional[str] = Field(None, max_length=255)
+    voorkeur_verzekeraar: Optional[str] = Field(None, max_length=255)
+    medische_bijzonderheden: Optional[str] = Field(None, max_length=255)
     medische_bijzonderheden_toelichting: Optional[str] = None
-    specifieke_wensen_zkv: Optional[str] = None
+    specifieke_wensen_zkv: Optional[str] = Field(None, max_length=255)
     wensen_toelichting: Optional[str] = None
-    dekking_zwangerschap: Optional[str] = None
+    dekking_zwangerschap: Optional[str] = Field(None, max_length=255)
     zwangerschap_toelichting: Optional[str] = None
 
     # Additional insurances
     andere_verzekeringen_interesse: Optional[str] = None
-    overlijdensrisico_bedrag: Optional[str] = None
-    overlijdensrisico_bedrag_anders: Optional[str] = None
+    overlijdensrisico_bedrag: Optional[str] = Field(None, max_length=255)
+    overlijdensrisico_bedrag_anders: Optional[str] = Field(None, max_length=255)
     overlijdensrisico_bestemming: Optional[str] = None
     overlijdensrisico_bestemming_anders: Optional[str] = None
 
     # Sports and activities
     sporten_activiteiten: Optional[str] = None
-    sport_semiprofessioneel: Optional[str] = None
+    sport_semiprofessioneel: Optional[str] = Field(None, max_length=255)
     sport_professioneel_omschrijving: Optional[str] = None
 
     # House in Netherlands
-    huis_in_nederland: Optional[str] = None
-    huis_type: Optional[str] = None
-    woning_verhuurd: Optional[str] = None
-    woning_eigen_gebruik: Optional[str] = None
-    woning_verblijf_frequentie: Optional[str] = None
+    huis_in_nederland: Optional[str] = Field(None, max_length=255)
+    huis_type: Optional[str] = Field(None, max_length=255)
+    woning_verhuurd: Optional[str] = Field(None, max_length=255)
+    woning_eigen_gebruik: Optional[str] = Field(None, max_length=255)
+    woning_verblijf_frequentie: Optional[str] = Field(None, max_length=500)
     woning_opmerkingen: Optional[str] = None
 
     # Marketing and contact
-    hoe_gevonden: Optional[str] = None
-    welke_website: Optional[str] = None
-    naam_werkgever: Optional[str] = None
+    hoe_gevonden: Optional[str] = Field(None, max_length=255)
+    welke_website: Optional[str] = Field(None, max_length=500)
+    naam_werkgever: Optional[str] = Field(None, max_length=500)
     hoe_gevonden_overig: Optional[str] = None
-    eerder_contact_joho: Optional[str] = None
-    eerder_contact_keuze: Optional[str] = None
-    naam_contactpersoon: Optional[str] = None
+    eerder_contact_joho: Optional[str] = Field(None, max_length=255)
+    eerder_contact_keuze: Optional[str] = Field(None, max_length=255)
+    naam_contactpersoon: Optional[str] = Field(None, max_length=500)
     eerder_contact_anders: Optional[str] = None
-    advies_vorm: Optional[str] = None
+    advies_vorm: Optional[str] = Field(None, max_length=255)
 
     # Raw backup
     raw_form_data: Optional[Dict[str, Any]] = None
